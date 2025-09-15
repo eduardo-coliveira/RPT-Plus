@@ -9,7 +9,7 @@ A minimal project for an **LLM-powered Refactoring Tutor**.
 ### 1) Multi-step hint system
 Helps users discover improvements step by step.
 
-![Multi-step hint system](./screenshots/1.png)
+![Hint syste,](.screenshots/1.png)
 
 ### 2) Transformation detection
 Automatically detects correct refactorings performed by the user.
