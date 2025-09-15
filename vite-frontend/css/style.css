@@ -1,0 +1,232 @@
+* {
+  box-sizing: border-box;
+}
+
+html, body, nav, main {
+  height: 100%;
+  max-height: 100%;
+  overflow-y: auto;
+}
+
+body {
+  display: flex;
+  flex-direction: row;
+  gap: 40px;
+  font-family: 'Roboto', sans-serif;
+  font-size: 14px; /* Global font size reduced */
+  padding: 0 40px;
+  margin: 0;
+  background-color: var(--md-sys-color-background);
+  color: var(--md-sys-color-on-background);
+}
+
+nav {
+  width: 40%;
+  min-width: 300px;
+}
+
+main {
+  width: 40%;
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 40px 0;
+}
+
+#hints {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+nav .logo {
+  display: flex;
+  padding: 20px 0px;
+  align-items: center;
+  gap: 20px;
+  align-self: stretch;
+}
+
+nav .logo svg {
+  width: 64px;
+  height: 64px;
+}
+
+nav .logo svg path {
+  fill: var(--md-sys-color-on-surface-variant);
+}
+
+nav .logo h1 {
+  font-size: 28px; /* slightly smaller */
+  line-height: 36px;
+}
+
+.exselect {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+#exlist {
+  display: block;
+  flex-grow: 1;
+}
+
+.chip {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px 6px 8px;
+  gap: 8px;
+  border-radius: 8px;
+  background: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+  font-size: 13px; /* reduced */
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.chip svg {
+  width: 18px;
+  height: 18px;
+  fill: var(--md-sys-color-primary);
+}
+
+.chip.correct {
+  background: var(--md-sys-color-tertiary-container);
+  color: var(--md-sys-color-on-tertiary-container);
+}
+.chip.correct svg path {
+  fill: var(--md-sys-color-on-tertiary-container);
+}
+.chip.failure {
+  background: var(--md-sys-color-error-container);
+  color: var(--md-sys-color-on-error-container);
+}
+.chip.failure svg path {
+  fill: var(--md-sys-color-on-error-container);
+}
+
+.card {
+  display: flex;
+  padding: 16px;
+  flex-direction: column;
+  align-items: flex-start;
+  align-self: stretch;
+  background-color: var(--md-sys-color-surface);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: 12px;
+  align-items: stretch;
+}
+
+.card h3 {
+  color: var(--md-sys-color-on-surface);
+  font-size: 15px;
+  line-height: 22px;
+  margin-bottom: 6px;
+}
+
+.card p {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 13px;
+  line-height: 18px;
+  margin-bottom: 6px;
+}
+
+.card code {
+  border-radius: 8px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  background: var(--md-sys-color-surface-container-high);
+  font-family: 'Roboto Mono', monospace;
+  font-size: 12px;
+  padding: 8px;
+  display: block;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.card pre {
+  margin: 8px 0;
+  font-size: 12px;
+  font-family: 'Roboto Mono', monospace;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--md-sys-color-surface-container-high);
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  max-width: 100%;
+}
+
+.card .actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+main .exercise {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+main .exercise h2 {
+  font-size: 26px;
+  line-height: 34px;
+}
+
+main .exercise p {
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.embedded-card {
+  background-color: var(--md-sys-color-surface);
+  border: 1px solid currentColor;
+  border-radius: 10px;
+  padding: 12px;
+  margin-top: 6px;
+  font-size: 13px;
+  color: inherit;
+}
+
+.embedded-card h3 {
+  color: inherit;
+  font-size: 14px;
+  margin: 0 0 6px;
+}
+
+.embedded-card details summary {
+  font-weight: 500;
+  cursor: pointer;
+  color: inherit;
+}
+
+.embedded-card details p,
+.embedded-card details code {
+  margin: 4px 0 0;
+  color: inherit;
+  font-size: 12px;
+}
+
+.embedded-card code {
+  background-color: rgba(255, 255, 255, 0.08);
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  padding: 6px;
+  font-family: 'Roboto Mono', monospace;
+  white-space: pre-wrap;
+  display: block;
+  overflow-x: auto;
+}
+
+
+#editor {
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: 12px;
+  flex-grow: 1;
+  min-height: 600px;
+}

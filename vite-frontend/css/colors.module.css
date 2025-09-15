@@ -1,0 +1,27 @@
+:root {
+  /* Base Material Design Colors */
+  --md-sys-color-primary: #6750a4;
+  --md-sys-color-on-primary: #ffffff;
+
+  --md-sys-color-secondary: #625b71;
+  --md-sys-color-on-secondary: #ffffff;
+  --md-sys-color-secondary-container: #e8def8;
+  --md-sys-color-on-secondary-container: #1d192b;
+
+  --md-sys-color-surface: #fef7ff;
+  --md-sys-color-on-surface: #1d1b20;
+  --md-sys-color-surface-container-high: #ece6f0;
+
+  --md-sys-color-outline-variant: #cac4d0;
+  --md-sys-color-background: #fef7ff;
+  --md-sys-color-on-background: #1d1b20;
+
+  /* Feedback Colors */
+  --md-green-sys-color-secondary-container: #d0f0c0;
+  --md-green-sys-color-on-secondary-container: #003900;
+  --md-green-sys-color-primary: #256029;
+
+  --md-red-sys-color-secondary-container: #f9dedc;
+  --md-red-sys-color-on-secondary-container: #410e0b;
+  --md-red-sys-color-primary: #b3261e;
+}

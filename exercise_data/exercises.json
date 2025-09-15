@@ -1,0 +1,100 @@
+[
+  {
+    "id": "1.even",
+    "parameters": 1,
+    "call_method": "countEven",
+    "start_method": "public static int countEven(int [] values)\n{\n    int count;\n    count = 0;\n    for (int i = 0;i < values.length;i++)\n    {\n        if (values[i] % 2 != 1)\n        {\n            count = count + 1;\n        }\n        else\n        {\n            count = count;\n        }\n    }\n    return count;\n}",
+    "description": "The countEven method returns the number of even integers in the values-array. Example test case: {1,2,3,4,5} returns 2. You don't have to deal with negative numbers.",
+    "result_type": "int",
+    "tests": [
+      { "inputs": [[1, 2, 3, 4, 5]], "expected": 2 },
+      { "inputs": [[2, 0, 4]], "expected": 3 },
+      { "inputs": [[]], "expected": 0, "comment": "Empty list returns 0." },
+      { "inputs": [[2]], "expected": 1 },
+      { "inputs": [[1, 3, 5, 7]], "expected": 0 },
+      { "inputs": [[22, 33, 1, 4, 8, 0, 88, 8, 1]], "expected": 6 }
+    ]
+  },
+  {
+    "id": "2.sumValues",
+    "parameters": 2,
+    "call_method": "sumValues",
+    "start_method": "public static int sumValues(int[] values, boolean positivesOnly)\n{\n    int sum = 0;\n    for (int i = 0; i < values.length; i++)\n    {\n        if (positivesOnly == true)\n        {\n            if (values[i] >= 0)\n            {\n                sum += values[i];\n            }\n        } else\n        {\n            sum += values[i];\n        }\n    }\n    return sum;\n}",
+    "description": "The sumValues method adds up all numbers from the values-array, or only the positive numbers if the positivesOnly boolean parameter is set to true. Example test case: calling sumvalues with {1,2,3,4,-5} and true returns 10.",
+    "result_type": "int",
+    "tests": [
+      { "inputs": [[1, 2, 3, 4, -5], true], "expected": 10 },
+      { "inputs": [[1, 2, 3, 4, -5], false], "expected": 5 },
+      { "inputs": [[-1, 2, -3, 4, -5], false], "expected": -3 },
+      { "inputs": [[-1, 2, -3, 4, -5, 6], true], "expected": 12 },
+      { "inputs": [[], true], "expected": 0, "comment": "Empty list has no numbers." },
+      { "inputs": [[-9], true], "expected": 0 }
+    ]
+  },
+  {
+    "id": "3.oddSum",
+    "parameters": 1,
+    "call_method": "oddSum",
+    "start_method": "public static int oddSum(int[] array)\n{\n    int total = 0;\n    boolean stop = false;\n    for (int i = 1; i < array.length; i = i + 2)\n    {\n        if (stop == false)\n        {\n            if (array[i] != -1)\n            {\n                total += array[i];\n            }\n            else if (array[i] == -1)\n            {\n                stop = true;\n            }\n        }\n        else\n        {\n            total = total;\n        }\n    }\n    return total;\n}",
+    "description": "The method oddSum returns the sum of all numbers at an odd index in the array parameter, until the number -1 is seen at an odd index. Example test case: {44, 12, 20, 1, -1, 3, 5,-1, 99, 4} returns 16 (12+1+3)",
+    "result_type": "int",
+    "tests": [
+      { "inputs": [[44, 12, 20, 1, -1, 3, 5, -1, 99, 4]], "expected": 16 },
+      { "inputs": [[]], "expected": 0, "comment": "Empty array has no odd-index elements." },
+      { "inputs": [[1]], "expected": 0, "comment": "Only one element at index 0 (not odd)." },
+      { "inputs": [[1, 2, 3, -2, 3, 9]], "expected": 9, "comment": "Indexes 1, 3, 5: 2, -2, 9 → 9" },
+      { "inputs": [[1, -1]], "expected": 0, "comment": "Stops at index 1 immediately." },
+      { "inputs": [[1, 2, 3, 4, 5]], "expected": 6, "comment": "Indexes 1, 3: 2+4=6" },
+      { "inputs": [[1, 2, 3, 0, 4, 5, 6, -1]], "expected": 7, "comment": "Indexes 1,3,5,7: 2+0+5=7 (stops at -1)" }
+    ]
+  },
+  {
+    "id": "4.score",
+    "parameters": 2,
+    "call_method": "calculateScore",
+    "start_method": "public static int calculateScore(int changes, int day)\n{\n    int score = 10;\n    for (int i = 0; i < changes; i++)\n    {\n        score = score - 1;\n    }\n    if (day == 6 || day == 7)\n    {\n        return score;\n    }\n    else\n    {\n        score = score - 3;\n        return score;\n    }\n}",
+    "description": "The calculateScore method calculates the score for a train trip. The highest score is 10. The score is based on the number of changes and the day of the week (Monday is 1, Sunday is 7). Dutch Railways (NS) has designed the following calculation:<br>Base score: 10<br>For each change: -1<br>Trip on a weekday: -3. Example test case: for a trip with 2 changes on a Wednesday (day 3), calculateScore(2, 3) returns a score of 5 (10-2-3)",
+    "result_type": "int",
+    "tests": [
+      { "inputs": [2, 3], "expected": 5, "comment": "2 changes, weekday (10-2-3)" },
+      { "inputs": [1, 4], "expected": 6, "comment": "1 change, weekday (10-1-3)" },
+      { "inputs": [5, 1], "expected": 2, "comment": "5 changes, Monday (10-5-3)" },
+      { "inputs": [2, 7], "expected": 8, "comment": "2 changes, Sunday (10-2)" },
+      { "inputs": [0, 6], "expected": 10, "comment": "0 changes, Saturday (10)" },
+      { "inputs": [0, 5], "expected": 7, "comment": "0 changes, Friday (10-3)" },
+      { "inputs": [10, 1], "expected": -3, "comment": "10 changes, Monday (10-10-3)" }
+    ]
+  },
+  {
+    "id": "5.double",
+    "parameters": 2,
+    "call_method": "hasDoubled",
+    "start_method": "public static int hasDoubled(double savings, int interest)\n{\n    double target = 2 * savings;\n    int years;\n    for (years = 0; ; )\n    {\n        if(target > savings)\n        {\n            savings *= interest/100.0 + 1;\n            years++;\n        }\n        else if (target <= savings)\n        {\n            break;\n        }\n    }\n    return years;\n}",
+    "description": "Write a program that calculates in how many years your savings have doubled with the given interest (as a percentage). An example: if your savings are 1000 euros and the interest is 4%, it will take you 18 years to double your savings (then you'll have more than 2000 euros).",
+    "result_type": "int",
+    "tests": [
+      { "inputs": [1000.0, 4], "expected": 18, "comment": "1000 at 4% interest takes 18 years to exceed 2000" },
+      { "inputs": [1.0, 10], "expected": 8, "comment": "1.0 at 10% interest takes 8 years to exceed 2.0" },
+      { "inputs": [25.0, 100], "expected": 1, "comment": "100% interest doubles in 1 year" },
+      { "inputs": [25.0, 2], "expected": 36, "comment": "2% interest takes 36 years to double" },
+      { "inputs": [22.5, 8], "expected": 10, "comment": "22.5 at 8% interest takes 10 years to exceed 45.0" },
+      { "inputs": [999.0, 1], "expected": 70, "comment": "Low interest of 1% takes 70 years to double" }
+    ]
+  },
+  {
+    "id": "6.sumIsEven",
+    "parameters": 2,
+    "call_method": "sumIsEven",
+    "start_method": "public static boolean sumIsEven(int[] values, boolean positivesOnly)\n{\n    int sum = 0;\n    for (int i = 0; i < values.length; i++)\n    {\n        sum += values[i];\n        if (positivesOnly && values[i] < 0)\n        {\n            sum -= values[i];\n        }\n    }\n    if (sum % 2 != 1)\n    {\n        return true;\n    }\n    else\n    {\n        return false;\n    }\n}",
+    "description": "The sumIsEven method returns true if the sum of elements in the array is even. If 'positivesOnly' is true, it only sums positive values. Example: sumIsEven({1, 2, 3, 4, -5}, true) returns true, because 1+2+3+4 = 10, which is even.",
+    "result_type": "boolean",
+    "tests": [
+      { "inputs": [[1, 2, 3, 4, -5], true], "expected": "true", "comment": "Sum of positives: 1+2+3+4=10, even" },
+      { "inputs": [[1, 2, 3, 4, -5], false], "expected": "false", "comment": "Sum including negative: 1+2+3+4+(-5)=5, odd" },
+      { "inputs": [[-1, -2, -3], true], "expected": "true", "comment": "No positives => sum = 0, even" },
+      { "inputs": [[], false], "expected": "true", "comment": "Empty list => sum = 0, even" },
+      { "inputs": [[1], false], "expected": "false", "comment": "Sum = 1, odd" },
+      { "inputs": [[2, 4, 6], true], "expected": "true", "comment": "Sum = 12, even" }
+    ]
+  }
+]
