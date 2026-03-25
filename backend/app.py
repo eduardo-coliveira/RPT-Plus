@@ -55,6 +55,7 @@ async def run_code(data: CodeRequest):
         "version": "17.0.4",
         "files": [{"name": "Main.java", "content": data.code}]
     }
+
     try:
         response = requests.post(PISTON_URL, json=piston_data)
         response.raise_for_status()
@@ -303,20 +304,21 @@ def build_hint_tree(suggestions: List[Dict]) -> Dict:
         else:
             targeted_node = None
 
-        # Step 3: concrete hint
-        concrete = suggestion.get("concrete_hint")
-        if concrete:
-            concrete_node = make_node(concrete, "step", index)
-            (targeted_node or general_node)["Tree"][2].append(concrete_node)
-            index += 1
-        else:
-            concrete_node = None
+        # # Step 3: concrete hint
+        # concrete = suggestion.get("concrete_hint")
+        # if concrete:
+        #     concrete_node = make_node(concrete, "step", index)
+        #     (targeted_node or general_node)["Tree"][2].append(concrete_node)
+        #     index += 1
+        # else:
+        #     concrete_node = None
 
         # Step 4: refactored code (text in meta, visual in tree)
         refactored_code = suggestion.get("refactored_code")
         if refactored_code:
             code_node = make_node(refactored_code, "code", index)
-            (concrete_node or targeted_node or general_node)["Tree"][2].append(code_node)
+            # (concrete_node or targeted_node or general_node)["Tree"][2].append(code_node)
+            (targeted_node or general_node)["Tree"][2].append(code_node)
             index += 1
 
         return general_node, index

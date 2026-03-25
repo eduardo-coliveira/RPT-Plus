@@ -71,11 +71,13 @@ class SuggestedRefactoringWithHints(BaseModel):
         description="A concise name for the suggested refactoring (e.g., 'Simplify conditional', 'Use foreach loop')."
     )
     suggestion: str = Field(
-        description="Explanation of the proposed structural or stylistic change to the current code."
+        # description="Explanation of the proposed structural or stylistic change to the current code."
+        description="A description of the proposed refactoring."
     )
     reason: Optional[str] = Field(
         default=None,
-        description="Why this change would improve the code (e.g., better readability, cleaner structure, idiomatic usage)."
+        # description="Why this change would improve the code (e.g., better readability, cleaner structure, idiomatic usage)."
+        description="An explanation of why this refactoring improves code quality (e.g., better readability, cleaner structure, idiomatic usage)."
     )
     target_code: Optional[str] = Field(
         default=None,
@@ -83,24 +85,29 @@ class SuggestedRefactoringWithHints(BaseModel):
     )
     refactored_code: Optional[str] = Field(
         default=None,
-        description="The fully refactored version of the target code snippet, reflecting the proposed improvement."
+        # description="The fully refactored version of the target code snippet, reflecting the proposed improvement."
+        description="The refactored code only. No textual explanation."
     )
 
     # Hints to help guide students toward discovering the refactoring
     general_hint: Optional[str] = Field(
         default=None,
-        description="A broad, non-specific suggestion encouraging the student to review general aspects of the code style or structure (e.g., 'Look for patterns that repeat')."
+        # description="A broad, non-specific suggestion encouraging the student to review general aspects of the code style or structure (e.g., 'Look for patterns that repeat')."
+        description="A high-level description of a quality issue in the code. It must NOT refer to a solution."
     )
     targeted_hint: Optional[str] = Field(
         default=None,
-        description="A more specific hint pointing out a particular line or block in the code that may be improved (e.g., 'Consider whether this loop can be written more simply')."
+        # description="A more specific hint pointing out a particular line or block in the code that may be improved (e.g., 'Consider whether this loop can be written more simply')."
+        description="A detailed textual explanation of the suggested refactoring. It must NOT include code."
     )
-    concrete_hint: Optional[str] = Field(
-        default=None,
-        description="An example or nearly complete suggestion that demonstrates how the code might be changed (e.g., 'Try replacing this if-else chain with a dictionary lookup')."
-    )
+    # concrete_hint: Optional[str] = Field(
+    #     default=None,
+    #     # description="An example or nearly complete suggestion that demonstrates how the code might be changed (e.g., 'Try replacing this if-else chain with a dictionary lookup')."
+    #     description="The refactored code only. No textual explanation."
+    # )
 
 class SuggestedRefactoringsWithHints(BaseModel):
     suggestions: List[SuggestedRefactoringWithHints] = Field(
-        description="List of suggested behavior-preserving refactorings with progressively specific hints to help students identify and understand improvements."
+        # description="List of suggested behavior-preserving refactorings with progressively specific hints to help students identify and understand improvements."
+        description="List of suggested refactorings with three levels of hints to help students improve code quality."
     )
