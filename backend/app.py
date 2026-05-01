@@ -7,6 +7,8 @@ from dotenv import load_dotenv
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from backend.schemas import CodeRequest, HintRequest, DiagnoseRequest
 from backend.prompting import get_client_wrapper
 # from mistralai.client import Mistral
@@ -44,11 +46,20 @@ with open(os.path.join("exercise_data","exercises.json")) as f:
     EXERCISES = {ex["id"]: ex for ex in json.load(f)}
 
 
+# === Static Files Setup ===
+
+DIST_DIR = os.path.join(os.path.dirname(__file__), "../vite-frontend/dist")
+
+# Mount assets folder for CSS, JS, etc.
+app.mount("/assets", StaticFiles(directory=os.path.join(DIST_DIR, "assets")), name="assets")
+
+
 # === Routes ===
 
 @app.get("/")
-def read_root():
-    return {"status": "ok"}
+def serve_root():
+    """Serve index.html for root path"""
+    return FileResponse(os.path.join(DIST_DIR, "index.html"))
 
 
 @app.get("/exercises")
@@ -388,5 +399,12 @@ def build_hint_tree(suggestions: List[Dict]) -> Dict:
     return {
         "Tree": ["Suggested Refactorings", "hint", tree_nodes, 0, -1, {}]
     }
+
+
+# Fallback route for SPA - serve index.html for all unmatched routes
+@app.get("/{full_path:path}")
+def serve_spa(full_path: str):
+    """Serve index.html for client-side routing"""
+    return FileResponse(os.path.join(DIST_DIR, "index.html"))
 
 

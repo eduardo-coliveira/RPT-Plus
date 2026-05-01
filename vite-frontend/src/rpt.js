@@ -1,6 +1,6 @@
 // Refactored RPT Frontend
 
-const apiUrl = "http://localhost:8000";
+const apiUrl = "";
 
 let exercises = [];
 let currentExerciseId = "1.even";
