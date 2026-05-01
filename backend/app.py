@@ -1,12 +1,23 @@
+from dotenv import load_dotenv
+
+# # Monkey patch mistralai to provide top-level Mistral import for instructor compatibility
+# import mistralai
+# from mistralai.client import Mistral as RealMistral
+# mistralai.Mistral = RealMistral
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from backend.schemas import CodeRequest, HintRequest, DiagnoseRequest
 from backend.prompting import get_client_wrapper
+# from mistralai.client import Mistral
 import os
 import requests
 import json
 import re
 from typing import List, Dict, Tuple
+
+# Load API keys from .env file
+load_dotenv()
 
 # === FastAPI App Setup ===
 
@@ -19,8 +30,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-PISTON_URL = "https://emkc.org/api/v2/piston/execute"
-app.state.client_wrapper = get_client_wrapper("gpt-4-turbo", local=False)
+JUDGE0_URL = "https://ce.judge0.com/submissions"
+# app.state.client_wrapper = get_client_wrapper("gpt-4-turbo", local=False)
+# app.state.client_wrapper = get_client_wrapper("labs-devstral-small-2512")
+# app.state.client_wrapper = get_client_wrapper("codestral-2508")
+app.state.client_wrapper = get_client_wrapper("mistral-medium-latest")
+# app.state.client_wrapper = get_client_wrapper("codestral-latest")
+# app.state.client_wrapper = get_client_wrapper("mistral-small-2506")
 
 # === Load Exercises ===
 
@@ -50,17 +66,33 @@ def get_exercise(exercise_id: str):
 
 @app.post("/run_code")
 async def run_code(data: CodeRequest):
-    piston_data = {
-        "language": "java",
-        "version": "17.0.4",
-        "files": [{"name": "Main.java", "content": data.code}]
+    judge0_data = {
+        "language_id": 62,  # Java (OpenJDK 13.0.1)
+        "source_code": data.code,
+        "stdin": "",
+        "expected_output": None
     }
 
     try:
-        response = requests.post(PISTON_URL, json=piston_data)
+        # Use ?wait=true to get results immediately
+        response = requests.post(f"{JUDGE0_URL}?wait=true", json=judge0_data)
         response.raise_for_status()
+        result = response.json()
         
-        return response.json()
+        # Convert Judge0 response to Piston-compatible format
+        # Prioritize compile_output for compilation errors, then stderr for runtime errors
+        error_output = result.get("compile_output", "") or result.get("stderr", "")
+        
+        return {
+            "language": "java",
+            "version": "17.0.4",
+            "run": {
+                "code": result.get("exit_code", 1),
+                "signal": None,
+                "output": result.get("stdout", ""),
+                "stderr": error_output
+            }
+        }
     except Exception as e:
         return {"error": str(e)}
 
@@ -74,20 +106,39 @@ async def diagnose(data: DiagnoseRequest):
     full_code = build_java_program(data.submitted_code, generate_test_code(ex["call_method"], ex["result_type"], ex["tests"]))
 
     try:
-        response = requests.post(PISTON_URL, json={
-            "language": "java",
-            "version": "15.0.2",
-            "files": [{"name": "Main.java", "content": full_code}]
-        }).json()
-
-        run_info = response.get("run", {})
-        output = run_info.get("output", "")
-        stderr = run_info.get("stderr", "")
-        exit_code = run_info.get("code", 0)
+        judge0_data = {
+            "language_id": 62,  # Java (OpenJDK 13.0.1)
+            "source_code": full_code,
+            "stdin": "",
+            "expected_output": None
+        }
         
-        
+        # Use ?wait=true to get results immediately
+        response = requests.post(f"{JUDGE0_URL}?wait=true", json=judge0_data)
+        response.raise_for_status()
+        result = response.json()
 
-        # === Catch Compile or Runtime Errors ===
+        # Convert Judge0 response to Piston-compatible format for processing
+        # Prioritize compile_output for compilation errors, then stderr for runtime errors
+        error_output = result.get("compile_output", "") or result.get("stderr", "")
+        
+        run_info = {
+            "code": result.get("exit_code", 1),
+            "output": result.get("stdout", ""),
+            "stderr": error_output
+        }
+        
+        output = run_info["output"]
+        stderr = run_info["stderr"]
+        exit_code = run_info["code"]
+
+        # Check if compilation failed
+        status_id = result.get("status", {}).get("id", 3)  # 3 is Accepted, 6 is Compilation Error
+        if status_id == 6:  # Compilation Error
+            return {
+                "status": "compile_error",
+                "message": error_output
+            }
 
         test_results_found = False
         for line in output.splitlines():
@@ -150,6 +201,7 @@ async def get_hint_tree(data: HintRequest):
             "hint_tree": tree,
             "suggestions": suggested.suggestions
             }
+
     except Exception as e:
         return {"error": str(e)}
 

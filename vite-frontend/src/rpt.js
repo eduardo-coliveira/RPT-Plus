@@ -233,7 +233,8 @@ async function generateHints() {
     console.log("Hint response:", data);
 
     if (!data.hint_tree) {
-      showMsg("No structured hints available.", msgtype.FAILURE);
+      // showMsg("No structured hints available.", msgtype.FAILURE);
+      showMsg(data.suggestions, msgtype.HINT);
       return null;
     }
 

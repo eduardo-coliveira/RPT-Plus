@@ -1,6 +1,12 @@
 from typing import Type, get_args, get_origin
 from pydantic import BaseModel
-from openai import OpenAI 
+# from openai import OpenAI
+# Monkey patch mistralai to provide top-level Mistral import for instructor compatibility
+import mistralai
+from mistralai.client import Mistral as RealMistral
+mistralai.Mistral = RealMistral
+from mistralai import Mistral
+
 import instructor
 import os
 from backend.prompts import *
@@ -48,11 +54,12 @@ class LLMClientWrapper:
         print(response)
         return response
     
-def get_client_wrapper(model: str, local: bool = False): 
-    if local: 
-        client = instructor.from_openai(OpenAI(base_url='http://localhost:11434/v1',api_key='ollama' ),mode=instructor.Mode.JSON)
-    else:
-        client = instructor.from_openai(OpenAI(api_key=os.environ.get("OPENAI_API_KEY")), mode=instructor.Mode.JSON)
+def get_client_wrapper(model: str): 
+    # if local: 
+    #     client = instructor.from_openai(OpenAI(base_url='http://localhost:11434/v1',api_key='ollama' ),mode=instructor.Mode.JSON)
+    # else:
+        # client = instructor.from_openai(OpenAI(api_key=os.environ.get("OPENAI_API_KEY")), mode=instructor.Mode.JSON)
+    client = instructor.from_mistral(Mistral(api_key=os.environ.get("MISTRAL_API_KEY")), mode=instructor.Mode.MISTRAL_STRUCTURED_OUTPUTS)
     return LLMClientWrapper(client, model)
 
 

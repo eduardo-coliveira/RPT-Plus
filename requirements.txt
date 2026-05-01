@@ -4,3 +4,5 @@ pydantic
 requests
 openai
 instructor
+mistralai
+python-dotenv
