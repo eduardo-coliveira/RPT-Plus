@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from backend.schemas import CodeRequest, HintRequest, DiagnoseRequest
 from backend.prompting import get_client_wrapper
 # from mistralai.client import Mistral
@@ -211,10 +211,10 @@ async def get_hint_tree(data: HintRequest):
             "status": "correct",
             "hint_tree": tree,
             "suggestions": suggested.suggestions
-            }
+        }
 
     except Exception as e:
-        return {"error": str(e)}
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 
 @app.post("/correct_feedback")

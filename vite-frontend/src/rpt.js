@@ -232,9 +232,16 @@ async function generateHints() {
     const data = await res.json();
     console.log("Hint response:", data);
 
+    if (data.error) {
+      showMsg(`Hint service error: ${data.error}`, msgtype.FAILURE);
+      return null;
+    }
+
     if (!data.hint_tree) {
-      // showMsg("No structured hints available.", msgtype.FAILURE);
-      showMsg(data.suggestions, msgtype.HINT);
+      const fallbackHint = Array.isArray(data.suggestions)
+        ? data.suggestions.map((s) => s.suggestion || s.general_hint || JSON.stringify(s)).join("\n")
+        : data.suggestions;
+      showMsg(fallbackHint || "No structured hints available.", msgtype.HINT);
       return null;
     }
 
