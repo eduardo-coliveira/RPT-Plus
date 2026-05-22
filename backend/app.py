@@ -9,21 +9,30 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
-from backend.schemas import CodeRequest, HintRequest, DiagnoseRequest
+from backend.schemas import CodeRequest, HintRequest, DiagnoseRequest, ActionLogRequest, LoginRequest
 from backend.prompting import get_client_wrapper
 # from mistralai.client import Mistral
 import os
 import requests
 import json
 import re
+import pymysql
+from backend.database import init_db, log_action_entry, authenticate_user
+from datetime import datetime
 from typing import List, Dict, Tuple
+from contextlib import asynccontextmanager
 
 # Load API keys from .env file
 load_dotenv()
 
 # === FastAPI App Setup ===
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()  # Sync code is fine here
+    yield
+
+app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], 
@@ -32,13 +41,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-JUDGE0_URL = "https://ce.judge0.com/submissions"
 # app.state.client_wrapper = get_client_wrapper("gpt-4-turbo", local=False)
 # app.state.client_wrapper = get_client_wrapper("labs-devstral-small-2512")
 # app.state.client_wrapper = get_client_wrapper("codestral-2508")
 app.state.client_wrapper = get_client_wrapper("mistral-medium-latest")
 # app.state.client_wrapper = get_client_wrapper("codestral-latest")
 # app.state.client_wrapper = get_client_wrapper("mistral-small-2506")
+
+@app.post("/login")
+async def login(data: LoginRequest):
+    user = authenticate_user(data.username, data.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    return {"username": user["username"], "group": user["group_name"]}
+
+JUDGE0_URL = "https://ce.judge0.com/submissions"
 
 # === Load Exercises ===
 
@@ -196,16 +213,23 @@ async def diagnose(data: DiagnoseRequest):
 @app.post("/hint_tree")
 async def get_hint_tree(data: HintRequest):
     ex = EXERCISES.get(data.exercise_id)
+    hint_group = data.hint_group
     if not ex:
         raise HTTPException(status_code=404, detail="Exercise not found")
 
     try:
         prompt_data = {
             "submitted_code": data.submitted_code,
-            "previous_code": "",
-            "method_explanation": ex["description"]
+            "previous_code": data.previous_code,
+            "method_explanation": ex["description"],
+            "hint_group": hint_group
         }
-        suggested = app.state.client_wrapper.call("SUGGESTED", prompt_data)
+        print(hint_group)
+        if hint_group == "STATE-BASED":
+            suggested = app.state.client_wrapper.call("SUGGESTED", prompt_data)
+        else:
+            suggested = app.state.client_wrapper.call("STEP_BASED_SUGGESTED", prompt_data)
+        
         tree = build_hint_tree([s.model_dump() for s in suggested.suggestions])
         return {
             "status": "correct",
@@ -215,6 +239,18 @@ async def get_hint_tree(data: HintRequest):
 
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.post("/log_action")
+async def log_action(data: ActionLogRequest):
+    success = log_action_entry(
+        username=data.username,
+        exercise=data.exercise,
+        current_code=data.current_code,
+        action=data.action,
+    )
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to log action")
+    return {"status": "ok"}
 
 
 @app.post("/correct_feedback")
@@ -259,28 +295,6 @@ async def get_notequiv_feedback(data: DiagnoseRequest):
         }
     except Exception as e:
         return {"error": str(e)}
-
-    
-
-@app.post("/hints")
-async def get_flat_hints(data: HintRequest):
-    ex = EXERCISES.get(data.exercise_id)
-    if not ex:
-        raise HTTPException(status_code=404, detail="Exercise not found")
-
-    try:
-        prompt_data = {
-            "submitted_code": data.submitted_code,
-            "previous_code": "",  
-            "method_explanation": ex["description"]
-        }
-
-        suggested = app.state.client_wrapper.call("SUGGESTED", prompt_data)
-        return {"suggestions": suggested.suggestions}
-
-    except Exception as e:
-        return {"error": str(e)}
-
 
 # === Internal Helpers ===
 

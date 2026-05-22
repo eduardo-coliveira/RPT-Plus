@@ -182,3 +182,18 @@ Your task is to first analyze the code quality.
 
 If you do not find any meaningful improvement that clearly improves code readability, respond with an empty list: `[]`.
 """
+
+
+step_based_system_prompt = """
+
+"""
+
+step_based_user_prompt = """
+List the differences between these two code versions.
+
+Previous code:
+{previous_code}
+
+Current code:
+{submitted_code}
+"""

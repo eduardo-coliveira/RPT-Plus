@@ -20,16 +20,19 @@ class LLMClientWrapper:
             "ERROR": error_system_prompt,
             "PRESENT": present_rf_system_prompt,
             "SUGGESTED": suggested_rf_system_prompt,
+            "STEP_BASED_SUGGESTED": step_based_system_prompt
         }
         self.user_prompt_templates: dict = {
             "ERROR": error_user_prompt,
             "PRESENT": present_rf_user_prompt,
             "SUGGESTED": suggested_rf_user_prompt,
+            "STEP_BASED_SUGGESTED": step_based_user_prompt
         }
         self.response_models: dict = {
             "ERROR": SimpleError,
             "PRESENT": RefactoringSteps,
             "SUGGESTED": SuggestedRefactoringsWithHints,
+            "STEP_BASED_SUGGESTED": SuggestedRefactoringsStepBased
         }
 
     def call(self, prompt_type: str, prompt_data: dict, temperature: float = 0.0, max_tokens=1600, **kwargs) -> BaseModel:

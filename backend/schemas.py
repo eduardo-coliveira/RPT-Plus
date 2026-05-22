@@ -21,8 +21,19 @@ class DiagnoseRequest(BaseModel):
 
 class HintRequest(BaseModel):
     exercise_id: str
+    previous_code: str
     submitted_code: str
+    hint_group: str
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
     
+class ActionLogRequest(BaseModel):
+    username: str
+    exercise: str
+    current_code: str
+    action: str
 
 class PromptRequest(BaseModel):
     prompt_type: str
@@ -110,4 +121,9 @@ class SuggestedRefactoringsWithHints(BaseModel):
     suggestions: List[SuggestedRefactoringWithHints] = Field(
         # description="List of suggested behavior-preserving refactorings with progressively specific hints to help students identify and understand improvements."
         description="List of suggested refactorings with three levels of hints to help students improve code quality."
+    )
+
+class SuggestedRefactoringsStepBased(BaseModel):
+    suggestions: List[str] = Field(
+        description="Testing step-based feedback."
     )

@@ -13,4 +13,5 @@ import '@material/web/chips/suggestion-chip.js';
 import '@material/web/icon/icon.js';
 import '@material/web/dialog/dialog.js';
 import '@material/web/progress/circular-progress.js';
+import './login.js';
 

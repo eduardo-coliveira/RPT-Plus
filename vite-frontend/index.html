@@ -17,7 +17,24 @@
   <link href="https://fonts.googleapis.com/css2?family=Roboto&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@48,400,0,0&display=swap" rel="stylesheet">
 </head>
 <body>
-  <nav>
+
+<div id="loginOverlay">
+  <div class="login-card">
+    <h1>Sign in to Refactor Tutor</h1>
+    <form id="loginForm">
+      <label for="loginUsername">Username</label>
+      <input id="loginUsername" name="username" type="text" autocomplete="username" required />
+
+      <label for="loginPassword">Password</label>
+      <input id="loginPassword" name="password" type="password" autocomplete="current-password" required />
+
+      <button type="submit">Login</button>
+      <div class="login-message" id="loginMessage"></div>
+    </form>
+  </div>
+</div>
+
+  <nav style="display:none;">
     <div class="logo">
       <svg xmlns="http://www.w3.org/2000/svg" height="48" viewBox="0 -960 960 960" width="48">
         <path d="M320-242 80-482l242-242 43 43-199 199 197 197-43 43Zm318 2-43-43 199-199-197-197 43-43 240 240-242 242Z" />
@@ -124,7 +141,7 @@
     <div id="hints"></div>
   </nav>
 
-  <main>
+  <main style="display:none;">
     <section class="exercise">
       <h2 id="exname">Exercise 1.even</h2>
       <p id="exdesc">

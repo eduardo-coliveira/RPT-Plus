@@ -223,10 +223,95 @@ main .exercise p {
   overflow-x: auto;
 }
 
-
 #editor {
   border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: 12px;
   flex-grow: 1;
   min-height: 600px;
+}
+
+#loginOverlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 9999;
+  padding: 1rem;
+  font-family: 'Roboto', sans-serif;
+}
+
+#loginOverlay .login-card {
+  width: min(460px, 100%);
+  background: var(--md-sys-color-surface);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: 20px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.32);
+  padding: 2rem;
+  color: var(--md-sys-color-on-surface);
+}
+
+#loginOverlay h1 {
+  margin: 0 0 1rem;
+  font-size: 2rem;
+  line-height: 1.1;
+  color: var(--md-sys-color-on-surface);
+}
+
+#loginOverlay label {
+  display: block;
+  margin: 0.85rem 0 0.35rem;
+  font-size: 0.95rem;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+#loginOverlay input {
+  width: 100%;
+  padding: 0.95rem 1rem;
+  border-radius: 14px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  background: var(--md-sys-color-surface-container-low);
+  color: var(--md-sys-color-on-surface);
+  font-size: 1rem;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+#loginOverlay input:focus {
+  border-color: var(--md-sys-color-primary);
+  box-shadow: 0 0 0 4px rgba(240, 193, 0, 0.14);
+}
+
+#loginOverlay button {
+  width: 100%;
+  margin-top: 1.5rem;
+  padding: 0.95rem 1rem;
+  border: none;
+  border-radius: 14px;
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.15s ease, filter 0.2s ease;
+}
+
+#loginOverlay button:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+}
+
+#loginOverlay .login-message {
+  margin-top: 1rem;
+  min-height: 1.25rem;
+  color: var(--md-sys-color-error);
+  font-size: 0.95rem;
+}
+
+#loginOverlay .login-help {
+  margin-top: 1rem;
+  font-size: 0.95rem;
+  color: var(--md-sys-color-on-surface-variant);
+  line-height: 1.6;
 }

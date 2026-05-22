@@ -11,17 +11,58 @@ let currentHints = [];
 let currentHintTree;
 let isGeneratingHints = false;
 
+async function logUserAction(action) {
+  const user = window.currentUser || { username: "anonymous", group: "unknown" };
+  const payload = {
+    username: user.username,
+    group: user.group,
+    exercise: currentExerciseId,
+    current_code: typeof editor !== "undefined" ? editor.getValue() : "",
+    action,
+  };
 
-window.addEventListener("DOMContentLoaded", async () => {
+  try {
+    await fetch(`${apiUrl}/log_action`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    console.warn("Action logging failed:", err);
+  }
+}
+
+export async function initApp() {
   await loadExercises();
-  document.getElementById("runBtn").addEventListener("click", handleRun);
-  document.getElementById("gethinttree").addEventListener("click", handleHints);
-  document.getElementById("loadex").addEventListener("click", () => loadExercise(currentExerciseId));
-  document.getElementById("exerciseSelect").addEventListener("input", (e) => {
-    currentExerciseId = e.target.value;
-    loadExercise(currentExerciseId);
+  document.getElementById("runBtn").addEventListener("click", (event) => {
+    void logUserAction("Diagnose");
+    handleRun(event);
   });
-});
+  document.getElementById("gethinttree").addEventListener("click", () => {
+    void logUserAction("GetHint");
+    handleHints();
+  });
+  // document.getElementById("loadex").addEventListener("click", () => {
+  //   void logUserAction("RestartExercise");
+  //   loadExercise(currentExerciseId);
+  // });
+  // document.getElementById("exerciseSelect").addEventListener("input", (e) => {
+  //   currentExerciseId = e.target.value;
+  //   void logUserAction("NewExercise");
+  //   loadExercise(currentExerciseId);
+  // });
+  document.getElementById("loadex").addEventListener("click", async () => {
+    await loadExercise(currentExerciseId);  // Load FIRST
+    await logUserAction("RestartExercise");  // Log AFTER
+  });
+  document.getElementById("exerciseSelect").addEventListener("input", async (e) => {
+    currentExerciseId = e.target.value;
+    await loadExercise(currentExerciseId);  // Load FIRST
+    await logUserAction("NewExercise");     // Log AFTER
+  });
+}
+
+window.startApp = initApp;
 
 async function loadExercises() {
   const res = await fetch(`${apiUrl}/exercises`);
@@ -225,7 +266,9 @@ async function generateHints() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         exercise_id: currentExerciseId,
-        submitted_code: submittedCode
+        submitted_code: submittedCode,
+        previous_code: previousFunctionalCode,
+        hint_group: window.currentUser?.group
       })
     });
 
@@ -257,7 +300,15 @@ async function generateHints() {
 
 async function handleHints() {
   clearMessages();
+  document.getElementById("hints").innerHTML = "";
   submittedCode = editor.getValue();
+
+  // const currentGroup = window.currentUser?.group;
+  // if (currentGroup === "STEP-BASED") {
+  //   showMsg("Step-based hint", msgtype.HINT);
+  //   return;
+  // }
+
   console.log("[handleHints] Invoked");
   // If already generating, show spinner message and wait for it to finish
   if (isGeneratingHints) {
