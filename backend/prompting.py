@@ -20,27 +20,33 @@ class LLMClientWrapper:
             "ERROR": error_system_prompt,
             "PRESENT": present_rf_system_prompt,
             "SUGGESTED": suggested_rf_system_prompt,
-            "STEP_BASED_SUGGESTED": step_based_system_prompt
+            "STEP_BASED_SUGGESTED": step_based_system_prompt,
+            "STEP_ERROR": step_based_error_system_prompt
         }
         self.user_prompt_templates: dict = {
             "ERROR": error_user_prompt,
             "PRESENT": present_rf_user_prompt,
             "SUGGESTED": suggested_rf_user_prompt,
-            "STEP_BASED_SUGGESTED": step_based_user_prompt
+            "STEP_BASED_SUGGESTED": step_based_user_prompt,
+            "STEP_ERROR": step_based_error_user_prompt
         }
         self.response_models: dict = {
             "ERROR": SimpleError,
             "PRESENT": RefactoringSteps,
             "SUGGESTED": SuggestedRefactoringsWithHints,
-            "STEP_BASED_SUGGESTED": SuggestedRefactoringsStepBased
+            "STEP_BASED_SUGGESTED": SuggestedRefactoringsStepBased,
+            "STEP_ERROR": SimpleError
         }
 
-    def call(self, prompt_type: str, prompt_data: dict, temperature: float = 0.0, max_tokens=1600, **kwargs) -> BaseModel:
+    def call(self, prompt_type: str, prompt_data: dict, temperature: float = 0.0, max_tokens: int | None = None, **kwargs) -> BaseModel:
         # Prepare call arguments
         response_model = self.response_models.get(prompt_type)
         if not response_model:
             raise ValueError(f"Unknown prompt_type: {prompt_type}")
         prompt_data["fields"] = describe_model_fields(response_model)
+
+        token_budget = max_tokens if max_tokens is not None else int(os.getenv("LLM_MAX_TOKENS", "1000"))
+
         call_args = {
             "model": self.model,
             "messages": [
@@ -49,12 +55,12 @@ class LLMClientWrapper:
             ],
             "response_model": response_model,
             "temperature": temperature,
-            "max_tokens":max_tokens,
+            "max_tokens": token_budget,
             **kwargs
         }
 
         response = self.client.chat.completions.create(**call_args)
-        print(response)
+        # print(response)
         return response
     
 def get_client_wrapper(model: str): 

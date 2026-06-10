@@ -3,7 +3,7 @@
     "id": "1.even",
     "parameters": 1,
     "call_method": "countEven",
-    "start_method": "public static int countEven(int [] values)\n{\n    int count;\n    count = 0;\n    for (int i = 0;i < values.length;i++)\n    {\n        if (values[i] % 2 != 1)\n        {\n            count = count + 1;\n        }\n        else\n        {\n            count = count;\n        }\n    }\n    return count;\n}",
+    "start_method": "public static int countEven(int [] values)\n{\n    int count;\n    count = 0;\n    for (int i = 0; i < values.length; i++)\n    {\n        if (values[i] % 2 != 1)\n        {\n            count = count + 1;\n        }\n        else\n        {\n            count = count;\n        }\n    }\n    return count;\n}",
     "description": "The countEven method returns the number of even integers in the values-array. Example test case: {1,2,3,4,5} returns 2. You don't have to deal with negative numbers.",
     "result_type": "int",
     "tests": [

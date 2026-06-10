@@ -52,8 +52,12 @@ def init_db():
                         timestamp TEXT NOT NULL,
                         user_id INT NOT NULL,
                         exercise VARCHAR(255) NOT NULL,
-                        current_code TEXT,
                         action VARCHAR(255) NOT NULL,
+                        previous_code TEXT,
+                        current_code TEXT,                       
+                        code_status VARCHAR(255),
+                        feedback TEXT,
+                        hint_tree TEXT,
                         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
                     )
                 """)
@@ -92,7 +96,16 @@ def authenticate_user(username: str, password: str) -> Optional[Dict[str, Any]]:
         print(f"Authentication error: {e}")
         return None
 
-def log_action_entry(username: str, exercise: str, current_code: str, action: str) -> bool:
+def log_action_entry(
+    username: str,
+    exercise: str,
+    current_code: str,
+    action: str,
+    previous_code: Optional[str] = None,
+    code_status: Optional[str] = None,
+    feedback: Optional[str] = None,
+    hint_tree: Optional[str] = None,
+) -> bool:
     try:
         with get_db_connection() as conn:
             with conn.cursor(pymysql.cursors.DictCursor) as cursor:
@@ -107,8 +120,8 @@ def log_action_entry(username: str, exercise: str, current_code: str, action: st
                 cursor.execute(
                     """
                     INSERT INTO action_log
-                    (timestamp, user_id, exercise, current_code, action)
-                    VALUES (%s, %s, %s, %s, %s)
+                    (timestamp, user_id, exercise, current_code, action, previous_code, code_status, feedback, hint_tree)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         datetime.now(timezone.utc).isoformat(),
@@ -116,6 +129,10 @@ def log_action_entry(username: str, exercise: str, current_code: str, action: st
                         exercise,
                         current_code,
                         action,
+                        previous_code,
+                        code_status,
+                        feedback,
+                        hint_tree,
                     ),
                 )
                 conn.commit()

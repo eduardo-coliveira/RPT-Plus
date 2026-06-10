@@ -11,12 +11,15 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from backend.schemas import CodeRequest, HintRequest, DiagnoseRequest, ActionLogRequest, LoginRequest
 from backend.prompting import get_client_wrapper
+# from refactoring_misconceptions.errors import ALL_SNIPPETS
 # from mistralai.client import Mistral
 import os
 import requests
 import json
 import re
+import time
 import pymysql
+from threading import RLock
 from backend.database import init_db, log_action_entry, authenticate_user
 from datetime import datetime
 from typing import List, Dict, Tuple
@@ -26,6 +29,49 @@ from contextlib import asynccontextmanager
 load_dotenv()
 
 # === FastAPI App Setup ===
+
+RATE_LIMIT_SECONDS = 10
+LOGIN_LOCK_TTL_SECONDS = 900
+
+_active_user_sessions: Dict[str, float] = {}
+_last_request_time: Dict[str, float] = {}
+_user_lock = RLock()
+
+
+def _prune_expired_user_sessions(now: float) -> None:
+    expired_users = [
+        username for username, locked_at in _active_user_sessions.items()
+        if now - locked_at >= LOGIN_LOCK_TTL_SECONDS
+    ]
+    for username in expired_users:
+        _active_user_sessions.pop(username, None)
+
+
+def _claim_user_session(username: str) -> bool:
+    with _user_lock:
+        now = time.time()
+        _prune_expired_user_sessions(now)
+
+        if username in _active_user_sessions:
+            return False
+
+        _active_user_sessions[username] = now
+        return True
+
+
+# def _enforce_rate_limit(username: str) -> None:
+#     with _user_lock:
+#         now = time.time()
+#         key = username or "anonymous"
+#         last_call = _last_request_time.get(key)
+
+#         if last_call is not None and (now - last_call) < RATE_LIMIT_SECONDS:
+#             raise HTTPException(
+#                 status_code=429,
+#                 detail="Please wait 10 seconds before requesting another diagnosis or hint.",
+#             )
+
+#         _last_request_time[key] = now
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -44,7 +90,10 @@ app.add_middleware(
 # app.state.client_wrapper = get_client_wrapper("gpt-4-turbo", local=False)
 # app.state.client_wrapper = get_client_wrapper("labs-devstral-small-2512")
 # app.state.client_wrapper = get_client_wrapper("codestral-2508")
-app.state.client_wrapper = get_client_wrapper("mistral-medium-latest")
+# DEFAULT_MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-small-latest")
+# DEFAULT_MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-medium-3-5")
+DEFAULT_MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral-large-2512")
+app.state.client_wrapper = get_client_wrapper(DEFAULT_MISTRAL_MODEL)
 # app.state.client_wrapper = get_client_wrapper("codestral-latest")
 # app.state.client_wrapper = get_client_wrapper("mistral-small-2506")
 
@@ -53,6 +102,10 @@ async def login(data: LoginRequest):
     user = authenticate_user(data.username, data.password)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid username or password")
+
+    if not _claim_user_session(user["username"]):
+        raise HTTPException(status_code=409, detail="This user is already logged in elsewhere.")
+
     return {"username": user["username"], "group": user["group_name"]}
 
 JUDGE0_URL = "https://ce.judge0.com/submissions"
@@ -127,6 +180,9 @@ async def run_code(data: CodeRequest):
 
 @app.post("/diagnose")
 async def diagnose(data: DiagnoseRequest):
+    username = data.username or "anonymous"
+    # _enforce_rate_limit(username)
+
     ex = EXERCISES.get(data.exercise_id)
     if not ex:
         raise HTTPException(status_code=404, detail="Exercise not found")
@@ -212,8 +268,12 @@ async def diagnose(data: DiagnoseRequest):
 
 @app.post("/hint_tree")
 async def get_hint_tree(data: HintRequest):
+    username = data.username or "anonymous"
+    # _enforce_rate_limit(username)
+
     ex = EXERCISES.get(data.exercise_id)
     hint_group = data.hint_group
+    diagnosis_status = data.code_diagnosis
     if not ex:
         raise HTTPException(status_code=404, detail="Exercise not found")
 
@@ -222,13 +282,18 @@ async def get_hint_tree(data: HintRequest):
             "submitted_code": data.submitted_code,
             "previous_code": data.previous_code,
             "method_explanation": ex["description"],
-            "hint_group": hint_group
+            "hint_group": hint_group,
+            # "errors": ALL_SNIPPETS
         }
-        print(hint_group)
-        if hint_group == "STATE-BASED":
-            suggested = app.state.client_wrapper.call("SUGGESTED", prompt_data)
-        else:
+        print(f'Diagnosis: {diagnosis_status}')
+        print(f'Previous:\n{data.previous_code}')
+        print(f'Current:\n{data.submitted_code}')
+        # if hint_group == "STEP-BASED" and diagnosis == "notequiv":
+        if hint_group == "STEP-BASED" and diagnosis_status == "notequiv":
+            print("Step-based + RM feedback :)")
             suggested = app.state.client_wrapper.call("STEP_BASED_SUGGESTED", prompt_data)
+        else:
+            suggested = app.state.client_wrapper.call("SUGGESTED", prompt_data)
         
         tree = build_hint_tree([s.model_dump() for s in suggested.suggestions])
         return {
@@ -247,6 +312,10 @@ async def log_action(data: ActionLogRequest):
         exercise=data.exercise,
         current_code=data.current_code,
         action=data.action,
+        previous_code=data.previous_code,
+        code_status=data.code_status,
+        feedback=data.feedback,
+        hint_tree=data.hint_tree,
     )
     if not success:
         raise HTTPException(status_code=500, detail="Failed to log action")
@@ -282,17 +351,25 @@ async def get_notequiv_feedback(data: DiagnoseRequest):
         raise HTTPException(status_code=404, detail="Exercise not found")
 
     try:
+        # if hint_group == "STATE-BASED":
         test_case_failure = data.test_case_failure or "A test failed."
         prompt_data = {
+            "previous_code": data.previous_code,
             "submitted_code": data.submitted_code,
             "test_case_failure": test_case_failure,
             "method_explanation": ex["description"]
         }
-        response = app.state.client_wrapper.call("ERROR", prompt_data)
+        if data.hint_group == "STATE-BASED":
+            print("State-based feedback")
+            response = app.state.client_wrapper.call("ERROR", prompt_data)
+        else:
+            print("Step-based feedback")
+            response = app.state.client_wrapper.call("STEP_ERROR", prompt_data)
         return {
-            "error_summary": response.error_summary,
-            "error_location": response.error_location
+            "error_summary": response.error_summary
+            # "error_location": response.error_location
         }
+
     except Exception as e:
         return {"error": str(e)}
 

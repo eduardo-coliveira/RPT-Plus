@@ -49,4 +49,5 @@ pnpm-debug.log
 yarn-error.logvenv/
 
 venv/
+comprehension_quiz/
 refactoring_misconceptions/

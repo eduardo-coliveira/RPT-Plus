@@ -13,17 +13,27 @@ class Exercise(BaseModel):
     call_method: str
     tests: List[Dict]
 
+# class DiagnoseRequest(BaseModel):
+#     exercise_id: str
+#     submitted_code: str
+#     previous_code: Optional[str] = ""
+#     test_case_failure: Optional[str] = None
+
 class DiagnoseRequest(BaseModel):
     exercise_id: str
     submitted_code: str
     previous_code: Optional[str] = ""
+    hint_group: Optional[str] = None
     test_case_failure: Optional[str] = None
+    username: Optional[str] = None
 
 class HintRequest(BaseModel):
     exercise_id: str
-    previous_code: str
+    previous_code: Optional[str] = None
     submitted_code: str
     hint_group: str
+    code_diagnosis: Optional[str] = None
+    username: Optional[str] = None
 
 class LoginRequest(BaseModel):
     username: str
@@ -34,6 +44,10 @@ class ActionLogRequest(BaseModel):
     exercise: str
     current_code: str
     action: str
+    previous_code: Optional[str] = None
+    code_status: Optional[str] = None
+    feedback: Optional[str] = None
+    hint_tree: Optional[str] = None
 
 class PromptRequest(BaseModel):
     prompt_type: str
@@ -44,9 +58,10 @@ class SimpleError(BaseModel):
     error_summary: str = Field(
         description="Explanation of the mistake that was introduced."
     )
-    error_location: str = Field(
-        description="Where the error occurs in the code (e.g., a short snippet of issue)."
-    )
+    # error_location: str = Field(
+    # error_location: Optional[str] = Field(
+    #     description="Where the error occurs in the code (e.g., a short snippet of issue)."
+    # )
     
 class RefactoringStep(BaseModel):
     title: str = Field(
@@ -79,37 +94,29 @@ class RefactoringSteps(BaseModel):
     
 class SuggestedRefactoringWithHints(BaseModel):
     title: str = Field(
-        description="A concise name for the suggested refactoring (e.g., 'Simplify conditional', 'Use foreach loop')."
+        ..., description="A concise name for the suggested refactoring (e.g., 'Simplify conditional', 'Use foreach loop')."
     )
     suggestion: str = Field(
-        # description="Explanation of the proposed structural or stylistic change to the current code."
-        description="A description of the proposed refactoring."
+        ..., description="A description of the proposed refactoring."
     )
     reason: Optional[str] = Field(
         default=None,
-        # description="Why this change would improve the code (e.g., better readability, cleaner structure, idiomatic usage)."
         description="An explanation of why this refactoring improves code quality (e.g., better readability, cleaner structure, idiomatic usage)."
     )
     target_code: Optional[str] = Field(
         default=None,
         description="The specific code snippet or section this suggestion applies to."
     )
-    refactored_code: Optional[str] = Field(
-        default=None,
-        # description="The fully refactored version of the target code snippet, reflecting the proposed improvement."
-        description="The refactored code only. No textual explanation."
+    refactored_code: str = Field(
+        ..., description="The fully corrected code snippet at the bottom-out level. No textual explanation."
     )
 
     # Hints to help guide students toward discovering the refactoring
-    general_hint: Optional[str] = Field(
-        default=None,
-        # description="A broad, non-specific suggestion encouraging the student to review general aspects of the code style or structure (e.g., 'Look for patterns that repeat')."
-        description="A high-level description of a quality issue in the code. It must NOT refer to a solution."
+    general_hint: str = Field(
+        ..., description="A high-level description of a quality issue in the code. It must NOT refer to a solution."
     )
-    targeted_hint: Optional[str] = Field(
-        default=None,
-        # description="A more specific hint pointing out a particular line or block in the code that may be improved (e.g., 'Consider whether this loop can be written more simply')."
-        description="A detailed textual explanation of the suggested refactoring. It must NOT include code."
+    targeted_hint: str = Field(
+        ..., description="A detailed textual explanation of the suggested refactoring. It must NOT include code."
     )
     # concrete_hint: Optional[str] = Field(
     #     default=None,
@@ -123,7 +130,40 @@ class SuggestedRefactoringsWithHints(BaseModel):
         description="List of suggested refactorings with three levels of hints to help students improve code quality."
     )
 
+
+class SuggestedRefactoringCodeFix(BaseModel):
+    title: str = Field(
+        ..., description="A concise name for the incorrect refactoring step."
+    )
+    suggestion: str = Field(
+        ..., description="A description of the incorrect refactoring step."
+    )
+    reason: Optional[str] = Field(
+        default=None,
+        description="An explanation of why this refactoring makes code functionally correct."
+    )
+    target_code: Optional[str] = Field(
+        default=None,
+        description="The specific code snippet or section the incorrect refactoring applies to."
+    )
+    refactored_code: str = Field(
+        ..., description="The fully refactored version of the target code snippet, reflecting the proposed code fix. No textual explanation."
+    )
+
+    general_hint: str = Field(
+        ..., description="A high-level description of the incorrect refactoring step."
+    )
+    targeted_hint: str = Field(
+        ..., description="A detailed textual explanation of how to make code functionally correct again. It must NOT include code."
+    )
+    # concrete_hint: Optional[str] = Field(
+    #     default=None,
+    #     # description="An example or nearly complete suggestion that demonstrates how the code might be changed (e.g., 'Try replacing this if-else chain with a dictionary lookup')."
+    #     description="The refactored code only. No textual explanation."
+    # )
+
+
 class SuggestedRefactoringsStepBased(BaseModel):
-    suggestions: List[str] = Field(
-        description="Testing step-based feedback."
+    suggestions: List[SuggestedRefactoringCodeFix] = Field(
+        description="List of suggested fixes with three levels of hints to help students make code functionally correct."
     )

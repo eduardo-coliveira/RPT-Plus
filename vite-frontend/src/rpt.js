@@ -9,9 +9,12 @@ let previousFunctionalCode = "";
 let previousCode = "";
 let currentHints = [];
 let currentHintTree;
+let lastHintedCode = "";
 let isGeneratingHints = false;
+let diagnosis = "";
+let lastDiagnosedCode = "";
 
-async function logUserAction(action) {
+async function logUserAction(action, details = {}) {
   const user = window.currentUser || { username: "anonymous", group: "unknown" };
   const payload = {
     username: user.username,
@@ -19,6 +22,10 @@ async function logUserAction(action) {
     exercise: currentExerciseId,
     current_code: typeof editor !== "undefined" ? editor.getValue() : "",
     action,
+    previous_code: details.previous_code ?? previousCode,
+    code_status: details.code_status ?? null,
+    feedback: details.feedback ?? null,
+    hint_tree: details.hint_tree ?? null,
   };
 
   try {
@@ -35,12 +42,10 @@ async function logUserAction(action) {
 export async function initApp() {
   await loadExercises();
   document.getElementById("runBtn").addEventListener("click", (event) => {
-    void logUserAction("Diagnose");
     handleRun(event);
   });
   document.getElementById("gethinttree").addEventListener("click", () => {
-    void logUserAction("GetHint");
-    handleHints();
+    void handleHints();
   });
   // document.getElementById("loadex").addEventListener("click", () => {
   //   void logUserAction("RestartExercise");
@@ -104,17 +109,34 @@ async function loadExercise(id) {
 
   currentHints = [];
   currentHintTree = null;
+  lastHintedCode = "";
+  // diagnosis = "";
+  // lastDiagnosedCode = ex.start_method;
+  diagnosis = null;
+  lastDiagnosedCode = "";
   editor.setValue(ex.start_method, -1);
 
   const container = document.getElementById("refactoringCardContainer");
   container.innerHTML = "";
   container.style.display = "none";
+
+  showSpinner();
+  const initialDiagnosis = await diagnoseCode();
+  hideSpinner();
+
+  if (initialDiagnosis) {
+    diagnosis = initialDiagnosis;
+    lastDiagnosedCode = ex.start_method;
+  }
 }
 
 
 async function handleRun() {
   clearMessages();
   clearHints();
+  currentHintTree = null;
+  currentHints = [];
+  lastHintedCode = "";
   submittedCode = editor.getValue();
 
   if (!isNewSubmission()) {
@@ -125,11 +147,36 @@ async function handleRun() {
   showSpinner();
   const response = await diagnoseCode();
   hideSpinner();
+
   if (!response) return;
 
-  if (response.status === "compile_error") return handleError(response.message);
-  if (response.status === "notequiv") return handleNotEquivalent(response);
-  if (response.status === "correct") return handleCorrect();
+  diagnosis = response;
+  lastDiagnosedCode = submittedCode;
+
+  if (response.status === "compile_error") {
+    await logUserAction("Diagnose", {
+      previous_code: previousCode,
+      code_status: response.status || "unknown",
+      feedback: response.message || null,
+    });
+    return handleError(response.message);
+  }
+
+  if (response.status === "notequiv") {
+    return handleNotEquivalent(response);
+  }
+
+  if (response.status === "correct") {
+    const feedback = await handleCorrect();
+    await logUserAction("Diagnose", {
+      previous_code: previousCode,
+      code_status: response.status || "unknown",
+      // feedback: feedback?.refactor_steps || null,
+      feedback: JSON.stringify(feedback?.refactor_steps) || null,
+    });
+    // return handleCorrect();
+    return;
+  }
 }
 
 async function handleCorrect() {
@@ -139,14 +186,14 @@ async function handleCorrect() {
     generateCorrectFeedback(),
     { prepend: true }
   );
-  const hintPromise = generateHints();
+  // const hintPromise = generateHints();
   
   // Start spinner for hints using your built-in function
-  const hintResultPromise = showMsgWithSpinner(
-    "Looking for further improvements... ",
-    msgtype.HINT,
-    hintPromise
-  );
+  // const hintResultPromise = showMsgWithSpinner(
+  //   "Looking for further improvements... ",
+  //   msgtype.HINT,
+  //   hintPromise
+  // );
 
 
   // Handle feedback as soon as it's ready
@@ -180,19 +227,22 @@ async function handleCorrect() {
   }
 
   // When hint generation is done, show improvement summary
-  const hintResult = await hintResultPromise;
+  // const hintResult = await hintResultPromise;
 
-  if (hintResult) {
-    currentHints = hintResult.suggestions || [];
-    currentHintTree = hintResult.hint_tree;
+  // if (hintResult) {
+  //   currentHints = hintResult.suggestions || [];
+  //   currentHintTree = hintResult.hint_tree;
 
-    const numHints = currentHints.length;
-    const improvementMsg = numHints > 0
-      ? `There is still ${numHints} potential improvement${numHints > 1 ? "s" : ""} you can make.`
-      : "No additional improvements detected after analysis.";
+  //   const numHints = currentHints.length;
+  //   const improvementMsg = numHints > 0
+  //     ? `There is still ${numHints} potential improvement${numHints > 1 ? "s" : ""} you can make.`
+  //     : "No additional improvements detected after analysis.";
 
-    showMsg(improvementMsg, numHints > 0 ? msgtype.WARNING : msgtype.CORRECT);
-  }
+  //   showMsg(improvementMsg, numHints > 0 ? msgtype.WARNING : msgtype.CORRECT);
+  // }
+
+  previousCode = submittedCode;
+  return feedback;
 }
 
 
@@ -201,6 +251,7 @@ async function handleCorrect() {
 
 async function diagnoseCode() {
   try {
+    // previousCode = submittedCode;
     const res = await fetch(`${apiUrl}/diagnose`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -208,10 +259,10 @@ async function diagnoseCode() {
         exercise_id: currentExerciseId,
         submitted_code: submittedCode,
         previous_code: previousCode,
+        username: window.currentUser?.username || "anonymous",
       })
     });
-    previousCode = submittedCode;
-    return await res.json();
+    return await res.json();;
   } catch (err) {
     showMsg(`Server error: ${err.message}`, msgtype.FAILURE);
   }
@@ -224,6 +275,8 @@ async function generateNotEquivalentFeedback(data) {
     body: JSON.stringify({
       exercise_id: currentExerciseId,
       submitted_code: submittedCode,
+      previous_code: previousCode,
+      hint_group: window.currentUser?.group,
       test_case_failure: data.reason
     })
   });
@@ -254,6 +307,53 @@ async function generateCorrectFeedback() {
 }
 
 async function generateHints() {
+  const currentEditorCode = editor.getValue();
+  const codeChangedSinceLastDiagnosis = currentEditorCode.trim() !== lastDiagnosedCode.trim();
+  const hasCachedDiagnosis = Boolean(
+    diagnosis &&
+    typeof diagnosis.status === "string" &&
+    currentEditorCode.trim() === lastDiagnosedCode.trim()
+  );
+
+  let freshDiagnosis = hasCachedDiagnosis ? diagnosis : null;
+
+  if (!freshDiagnosis || codeChangedSinceLastDiagnosis) {
+    showSpinner();
+    freshDiagnosis = await diagnoseCode();
+    hideSpinner();
+    if (!freshDiagnosis) {
+      showMsg("Failed to diagnose code. Please try again.", msgtype.WARNING);
+      return null;
+    }
+    diagnosis = freshDiagnosis;
+    lastDiagnosedCode = currentEditorCode;
+  }
+
+  // if (!freshDiagnosis || freshDiagnosis.status === undefined) {
+  //   showMsg(
+  //     "Run Diagnose first to confirm whether the code is functionally correct before requesting hints.",
+  //     msgtype.WARNING
+  //   );
+  //   return null;
+  // }
+
+  // diagnosis = freshDiagnosis;
+  // if (codeChangedSinceLastDiagnosis) {
+  //   lastDiagnosedCode = currentEditorCode;
+  // }
+
+  // Block hints if code is not correct
+  if (freshDiagnosis.status !== "correct") {
+    await logUserAction("GetHint", {
+      previous_code: previousCode,
+      code_status: freshDiagnosis?.status || "unknown",
+      feedback: freshDiagnosis?.message || freshDiagnosis?.reason || null,
+      hint_tree: null,
+    });
+    showMsg(`You need to fix code functionality to get hints on code quality.`, msgtype.FAILURE);
+    return null;
+  }
+
   if (isGeneratingHints) {
     console.log("Hints already generating. Skipping...");
     return null;
@@ -267,12 +367,22 @@ async function generateHints() {
       body: JSON.stringify({
         exercise_id: currentExerciseId,
         submitted_code: submittedCode,
-        previous_code: previousFunctionalCode,
-        hint_group: window.currentUser?.group
+        previous_code: previousCode,
+        hint_group: window.currentUser?.group,
+        code_diagnosis: freshDiagnosis.status || null,
+        username: window.currentUser?.username || "anonymous",
       })
     });
+    // if (!res.ok) {
+    //   const errorData = await res.json().catch(() => ({}));
+    //   const message = errorData?.detail || "You need to wait 10 seconds to get LLM help.";
+    //   showMsg(message, msgtype.WARNING);
+    //   return null;
+    // }
 
     const data = await res.json();
+    // previousCode = submittedCode;
+
     console.log("Hint response:", data);
 
     if (data.error) {
@@ -280,11 +390,23 @@ async function generateHints() {
       return null;
     }
 
+    await logUserAction("GetHint", {
+      previous_code: previousCode,
+      code_status: freshDiagnosis?.status || "correct",
+      feedback: null,
+      hint_tree: data?.hint_tree ? JSON.stringify(data.hint_tree) : null,
+    });
+
+    currentHints = Array.isArray(data?.suggestions) ? data.suggestions : [];
+    currentHintTree = data?.hint_tree || null;
+    lastHintedCode = currentEditorCode;
+
     if (!data.hint_tree) {
       const fallbackHint = Array.isArray(data.suggestions)
         ? data.suggestions.map((s) => s.suggestion || s.general_hint || JSON.stringify(s)).join("\n")
         : data.suggestions;
       showMsg(fallbackHint || "No structured hints available.", msgtype.HINT);
+      console.log("No structured hints:", msgtype.HINT);
       return null;
     }
 
@@ -323,9 +445,9 @@ async function handleHints() {
     return;
   }
 
-  // If we already have a valid hint tree and code hasn't changed, render it immediately
-  if (currentHintTree && submittedCode.trim() === previousFunctionalCode.trim()) {
-    console.log("[handleHints] Reusing existing hint tree.");
+  // Only reuse a cached hint tree when it was generated from the exact current code snapshot.
+  if (currentHintTree && submittedCode.trim() === lastHintedCode.trim()) {
+    console.log("[handleHints] Reusing existing hint tree for the current code snapshot.");
     renderHintTree(currentHintTree);
     return;
   }
@@ -369,16 +491,15 @@ function handleError(message) {
 
 async function handleNotEquivalent(data) {
   // Message about what failed
-  console.log(data)
   if (data.expected == 'N/A') {
     showMsg(
-    `Something didn't work!`,
+    `Something did not work!`,
     msgtype.FAILURE
   );
   }
   else {
     showMsg(
-    `Calling \`${data.call}\` should return \`${data.expected}\`, but got \`${data.actual}\`.`,
+    `Calling \`${data.call}\` should return \`${data.expected}\`, but it got \`${data.actual}\`.`,
     msgtype.FAILURE
   );
   }
@@ -391,6 +512,12 @@ async function handleNotEquivalent(data) {
     generateNotEquivalentFeedback(data)
   );
 
+  await logUserAction("Diagnose", {
+    previous_code: previousCode,
+    code_status: "notequiv",
+    feedback: feedback?.error_summary || null,
+  });
+
   // Render explanation chip + embedded content
   const chip = document.createElement("div");
   chip.className = `chip ${alertClasses[msgtype.FAILURE]}`;
@@ -398,7 +525,7 @@ async function handleNotEquivalent(data) {
   chip.style.alignItems = "stretch";
 
   const header = document.createElement("div");
-  header.innerHTML = `<strong>${typeLabels[msgtype.FAILURE]}</strong>: Here's what might have gone wrong.`;
+  header.innerHTML = `<strong>${typeLabels[msgtype.FAILURE]}</strong>Here is what might have gone wrong.`;
   header.style.marginBottom = "8px";
   chip.appendChild(header);
 
@@ -419,19 +546,25 @@ async function handleNotEquivalent(data) {
   summaryDetails.appendChild(summaryContent);
   card.appendChild(summaryDetails);
 
-  const locationDetails = document.createElement("details");
-  const locationSummary = document.createElement("summary");
-  locationSummary.innerHTML = `<strong>Where in the code</strong>`;
-  locationDetails.appendChild(locationSummary);
+  // const locationDetails = document.createElement("details");
+  // const locationSummary = document.createElement("summary");
+  // locationSummary.innerHTML = `<strong>Where in the code</strong>`;
+  // locationDetails.appendChild(locationSummary);
 
-  const locationContent = document.createElement("code");
-  locationContent.textContent = feedback.error_location;
-  locationDetails.appendChild(locationContent);
-  card.appendChild(locationDetails);
+  // const locationContent = document.createElement("code");
+  // locationContent.textContent = feedback.error_location;
+  // locationDetails.appendChild(locationContent);
+  // card.appendChild(locationDetails);
 
   chip.appendChild(card);
 
   document.getElementById("feedbackContainer").appendChild(chip);
+
+  // await showMsgWithSpinner(
+  //   "Generating hints for functionally incorrect code... ",
+  //   msgtype.HINT,
+  //   generateHints()
+  // );
 }
 
 
@@ -725,6 +858,9 @@ function clearMessages() {
 function clearHints() {
   const hintsContainer = document.getElementById("hints");
   if (hintsContainer) hintsContainer.innerHTML = "";
+  currentHintTree = null;
+  currentHints = [];
+  lastHintedCode = "";
 }
 
 function showSpinner() {
