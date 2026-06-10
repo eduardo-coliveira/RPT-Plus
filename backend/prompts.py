@@ -1,24 +1,24 @@
-from refactoring_misconceptions.errors import ALL_SNIPPETS
-from backend.hint_examples import HINT_TREE_EXAMPLES
+# from refactoring_misconceptions.errors import ALL_SNIPPETS
+# from backend.hint_examples import HINT_TREE_EXAMPLES
 
-def generate_snippets_section():
-    snippets_section = []
-    for snippet in ALL_SNIPPETS:
-        snippets_section.append(
-            f"""
-Pattern {snippet['id']}:
-BEFORE:
-{snippet['BEFORE']}
+# def generate_snippets_section():
+#     snippets_section = []
+#     for snippet in ALL_SNIPPETS:
+#         snippets_section.append(
+#             f"""
+# Pattern {snippet['id']}:
+# BEFORE:
+# {snippet['BEFORE']}
 
-LATER:
-{snippet['LATER']}
+# LATER:
+# {snippet['LATER']}
 
----
-"""
-        )
-    return "\n".join(snippets_section)
+# ---
+# """
+#         )
+#     return "\n".join(snippets_section)
 
-SNIPPETS_SECTION = generate_snippets_section()
+# SNIPPETS_SECTION = generate_snippets_section()
 
 # Error Detection
 
@@ -223,49 +223,49 @@ If you do not find any meaningful improvement that clearly improves code readabi
 
 # Include hint examples to guide generation. Use double-braces for placeholders when formatting later.
 
-step_based_system_prompt = f"""
-You are a programming teacher who helps students fix their code. The syntax is correct, but the code failed a test case.
+# step_based_system_prompt = f"""
+# You are a programming teacher who helps students fix their code. The syntax is correct, but the code failed a test case.
 
-**Your role:**
-Analyze the previous and the current code versions. Look for instances of refactoring errors from the reference below.
-Each "BEFORE" snippet is functionally correct. Its corresponding "LATER" snippet is an incorrect refactoring attempt that resulted in a failed test case.
+# **Your role:**
+# Analyze the previous and the current code versions. Look for instances of refactoring errors from the reference below.
+# Each "BEFORE" snippet is functionally correct. Its corresponding "LATER" snippet is an incorrect refactoring attempt that resulted in a failed test case.
 
-Reference for refactoring errors:
-{SNIPPETS_SECTION}
+# Reference for refactoring errors:
+# {SNIPPETS_SECTION}
 
-Reference for hint tree:
-{HINT_TREE_EXAMPLES}
+# Reference for hint tree:
+# {HINT_TREE_EXAMPLES}
 
-**Instructions**
-1. For each "BEFORE" snippet in {SNIPPETS_SECTION}, check if it appears exactly or with minor syntactic variations in {{previous_code}}.
-2. If a "BEFORE" snippet is found, check if the corresponding "LATER" snippet is present in {{submitted_code}}.
-3. If both "BEFORE" and "AFTER" are found, suggest a three-level hint tree to fix the code so that {{submitted_code}} is functionally equivalent to {{previous_code}}.
-You must follow the level of detail from the {HINT_TREE_EXAMPLES}, but should use minor wording variations.
-You must always provide all three fields in every suggestion: `general_hint`, `targeted_hint`, and `refactored_code`.
-Do not leave `refactored_code` empty or null.
-When possible, the intermediate level hint should refer to De Morgan's laws.
-The bottom-out level hint must present only a correct refactored code snippet.
-4. If both code versions are functionally equivalent, respond with an empty list: `[]`.
+# **Instructions**
+# 1. For each "BEFORE" snippet in {SNIPPETS_SECTION}, check if it appears exactly or with minor syntactic variations in {{previous_code}}.
+# 2. If a "BEFORE" snippet is found, check if the corresponding "LATER" snippet is present in {{submitted_code}}.
+# 3. If both "BEFORE" and "AFTER" are found, suggest a three-level hint tree to fix the code so that {{submitted_code}} is functionally equivalent to {{previous_code}}.
+# You must follow the level of detail from the {HINT_TREE_EXAMPLES}, but should use minor wording variations.
+# You must always provide all three fields in every suggestion: `general_hint`, `targeted_hint`, and `refactored_code`.
+# Do not leave `refactored_code` empty or null.
+# When possible, the intermediate level hint should refer to De Morgan's laws.
+# The bottom-out level hint must present only a correct refactored code snippet.
+# 4. If both code versions are functionally equivalent, respond with an empty list: `[]`.
 
-"""
+# """
 
-step_based_user_prompt = """
-A student is working on a refactoring exercise. The previous version of the code was functionally correct, but the current version failed a test case. 
+# step_based_user_prompt = """
+# A student is working on a refactoring exercise. The previous version of the code was functionally correct, but the current version failed a test case. 
 
-Previous code:
-{previous_code}
+# Previous code:
+# {previous_code}
 
-Current code:
-{submitted_code}
+# Current code:
+# {submitted_code}
 
-Your task is to first check whether the current code version contains **one of the refactoring errors from the reference provided**.
+# Your task is to first check whether the current code version contains **one of the refactoring errors from the reference provided**.
 
-Based on reference hint tree and hint guidelines provided, suggest a three-level hint tree to fix the code so that {submitted_code} is functionally equivalent to {previous_code}.
-You must always include all three levels in every suggestion: `general_hint`, `targeted_hint`, and `refactored_code`.
-Do not leave `refactored_code` empty or null.
+# Based on reference hint tree and hint guidelines provided, suggest a three-level hint tree to fix the code so that {submitted_code} is functionally equivalent to {previous_code}.
+# You must always include all three levels in every suggestion: `general_hint`, `targeted_hint`, and `refactored_code`.
+# Do not leave `refactored_code` empty or null.
 
-If both code versions are functionally equivalent, respond with an empty list: `[]`.
-"""
+# If both code versions are functionally equivalent, respond with an empty list: `[]`.
+# """
 
 # step_based_user_prompt = f"""
 # Your task is to analyze two code snapshots and look for instances of refactoring errors:

@@ -288,12 +288,11 @@ async def get_hint_tree(data: HintRequest):
         print(f'Diagnosis: {diagnosis_status}')
         print(f'Previous:\n{data.previous_code}')
         print(f'Current:\n{data.submitted_code}')
-        # if hint_group == "STEP-BASED" and diagnosis == "notequiv":
-        if hint_group == "STEP-BASED" and diagnosis_status == "notequiv":
-            print("Step-based + RM feedback :)")
-            suggested = app.state.client_wrapper.call("STEP_BASED_SUGGESTED", prompt_data)
-        else:
-            suggested = app.state.client_wrapper.call("SUGGESTED", prompt_data)
+        # if hint_group == "STEP-BASED" and diagnosis_status == "notequiv":
+        #     print("Step-based + RM feedback :)")
+        #     suggested = app.state.client_wrapper.call("STEP_BASED_SUGGESTED", prompt_data)
+        # else:
+        suggested = app.state.client_wrapper.call("SUGGESTED", prompt_data)
         
         tree = build_hint_tree([s.model_dump() for s in suggested.suggestions])
         return {
