@@ -5,6 +5,7 @@ import os
 import json
 import pymysql
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from typing import Optional, Dict, Any
 
 # --- Configuration ---
@@ -124,7 +125,7 @@ def log_action_entry(
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
-                        datetime.now(timezone.utc).isoformat(),
+                        datetime.now(ZoneInfo('Europe/Amsterdam')).isoformat(),
                         user_id,
                         exercise,
                         current_code,

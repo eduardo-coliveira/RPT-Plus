@@ -202,19 +202,33 @@ async def diagnose(data: DiagnoseRequest):
         response.raise_for_status()
         result = response.json()
 
+        print("Judge0 response:", result)  # Log the full response
+       
+        output = result.get("stdout") or result.get("output") or ""
+        stderr = result.get("stderr") or ""
+        exit_code = result.get("exit_code", 1)
+
+        print(f"Extracted - output: {output}, stderr: {stderr}, exit_code: {exit_code}")
+
+        run_info = {
+            "code": exit_code,
+            "output": output,
+            "stderr": stderr
+        }       
+
+        # run_info = {
+        #     "code": result.get("exit_code", 1),
+        #     "output": result.get("stdout", ""),
+        #     "stderr": error_output
+        # }
+        
+        # output = run_info["output"]
+        # stderr = run_info["stderr"]
+        # exit_code = run_info["code"]
+
         # Convert Judge0 response to Piston-compatible format for processing
         # Prioritize compile_output for compilation errors, then stderr for runtime errors
-        error_output = result.get("compile_output", "") or result.get("stderr", "")
-        
-        run_info = {
-            "code": result.get("exit_code", 1),
-            "output": result.get("stdout", ""),
-            "stderr": error_output
-        }
-        
-        output = run_info["output"]
-        stderr = run_info["stderr"]
-        exit_code = run_info["code"]
+        error_output = result.get("compile_output", "") or stderr
 
         # Check if compilation failed
         status_id = result.get("status", {}).get("id", 3)  # 3 is Accepted, 6 is Compilation Error

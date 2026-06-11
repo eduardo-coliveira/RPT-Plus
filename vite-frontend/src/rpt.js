@@ -148,6 +148,8 @@ async function handleRun() {
   const response = await diagnoseCode();
   hideSpinner();
 
+  console.log("Response: ", response);
+
   if (!response) return;
 
   diagnosis = response;
