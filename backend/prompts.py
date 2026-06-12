@@ -364,8 +364,10 @@ Your task is to analyze both the previous and current code versions to identify 
 1 - Describe the incorrect refactoring step, along with the corresponding incorrect code snippet from the current version.
 2 - Present how that equivalent snippet looked like in the previous version, so the student can see the transition from correct to incorrect code.
 3 - Provide textual description of how to fix the code. If necessary, enumerate the steps.
+4 - In case the previous version contains a *quality issue*, do *NOT* suggest as a refactoring to return to the previous version.
+5 - In case the previous version is the best fix, simply suggest it *WITHOUT* providing any code in your explanation.
 
-*You must NEVER* provide any code solution, *not even a code snippet*. 
+**You must NEVER** provide any code solution to fix the code, *not even a single statement*. 
 
 Follow this example format for your feedback:
 
@@ -401,6 +403,76 @@ Merging the two if statements is a valid refactoring. To make your code function
 2 - Negate the whole expression.
 3 - Apply the law: the negation of 'A and B' is the same as 'not A or not B'.
 *** END OF FEEDBACK EXAMPLE ***
+
+Here are other examples of refactoring errors that you may find in the code versions. You are *not limited* to these examples.
+
+** Example of incorrect arithmetic expression shortening: **
+** Before **
+score = score - 3;
+
+** After **
+score =- 3;
+
+** Example of incorrect negation of even check: **
+** Before **
+if (i % 2 != 1)
+
+** After **
+if (i % 2 != 0)
+
+** Example of incorrect boolean expression simplification: **
+** Before **
+if (stop == false)
+
+** After **
+if (stop)
+
+** Example of incorrect bad if else simplification: **
+** Before **
+if (day == 6 || day == 7) {{
+    return score;
+}} else {{
+    score -= 3;
+    return score;
+}}
+
+** After **
+if (day != 6 || day != 7) {{
+    score -= 3;
+}}
+
+** Example of incorrect replacing a boolean flag: **
+** Before **
+boolean stop = false;
+for (...) {{
+    if (...) {{
+        stop = true;
+    }}
+}}
+return total;
+
+** After **
+boolean stop = false;
+for (...) {{
+    if (...) {{
+        continue;
+    }}
+}}
+
+** Example of incorrect update from a for to a for-each loop: **
+** Before **
+for (int i = 0; i < values.length; i++) {{
+    if (...) {{
+        sum += values[i];
+    }}
+}}
+
+** After **
+for (int i : values) {{
+    if (...) {{
+        sum += values[i];
+    }}
+}}
 """
 
 step_based_error_user_prompt = """

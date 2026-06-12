@@ -1,4 +1,24 @@
 // Refactored RPT Frontend
+import { marked } from 'marked';
+
+// Configure marked to sanitize HTML and handle line breaks
+marked.setOptions({
+  sanitize: true, // Sanitize HTML to prevent XSS attacks
+  breaks: true,   // Convert line breaks to <br>
+});
+
+// Helper function to render Markdown feedback
+function renderMarkdownFeedback(markdownText) {
+  // Convert Markdown to HTML
+  const html = marked.parse(markdownText);
+
+  // Create a container for the feedback
+  const container = document.createElement('div');
+  container.className = 'feedback-markdown';
+  container.innerHTML = html;
+
+  return container;
+}
 
 const apiUrl = "";
 
@@ -543,9 +563,13 @@ async function handleNotEquivalent(data) {
   summarySummary.innerHTML = `<strong>What went wrong</strong>`;
   summaryDetails.appendChild(summarySummary);
 
-  const summaryContent = document.createElement("p");
-  summaryContent.textContent = feedback.error_summary;
-  summaryDetails.appendChild(summaryContent);
+  // const summaryContent = document.createElement("p");
+  // summaryContent.textContent = feedback.error_summary;
+  // summaryDetails.appendChild(summaryContent);
+
+  // Render the Markdown feedback
+  const markdownContainer = renderMarkdownFeedback(feedback.error_summary);
+  summaryDetails.appendChild(markdownContainer);
   card.appendChild(summaryDetails);
 
   // const locationDetails = document.createElement("details");
@@ -674,10 +698,10 @@ function renderHintTree(tree) {
     targetedEl.innerHTML = `<br>${targetedHint || "No targeted hint available."}`;
     card.appendChild(targetedEl);
 
-    const concreteEl = document.createElement("p");
-    concreteEl.style.display = "none";
-    concreteEl.innerHTML = `<br>${concreteHint || "No concrete hint available."}`;
-    card.appendChild(concreteEl);
+    // const concreteEl = document.createElement("p");
+    // concreteEl.style.display = "none";
+    // concreteEl.innerHTML = `<br>${concreteHint || "No concrete hint available."}`;
+    // card.appendChild(concreteEl);
 
     const codeBlock = document.createElement("pre");
     codeBlock.style.display = "none";
@@ -696,11 +720,18 @@ function renderHintTree(tree) {
       step++;
       if (step === 1 && targetedHint) {
         targetedEl.style.display = "block";
-      } else if (step === 2 && concreteHint) {
-        concreteEl.style.display = "block";
         expandBtn.innerText = "Get Code";
-      } else if (step === 3 && refactoredCode) {
+      // } else if (step === 2 && concreteHint) {
+      //   concreteEl.style.display = "block";
+      //   expandBtn.innerText = "Get Code";
+      // } else if (step === 3 && refactoredCode) {
+      //   codeBlock.style.display = "block";
+      //   expandBtn.remove();
+      } else if (step === 2 && refactoredCode) {
         codeBlock.style.display = "block";
+        expandBtn.remove();
+      } else if (step === 3 && reason) {
+        reasonEl.style.display = "block";
         expandBtn.remove();
       } else {
         expandBtn.remove();
@@ -786,9 +817,11 @@ function renderEmbeddedCards(steps) {
       summary.textContent = label;
       detail.appendChild(summary);
 
-      const content = document.createElement("p");
-      content.textContent = value;
-      detail.appendChild(content);
+      // const content = document.createElement("p");
+      // content.textContent = value;
+      const markdownContainer = renderMarkdownFeedback(value);
+      detail.appendChild(markdownContainer);
+      // detail.appendChild(content);
       card.appendChild(detail);
     });
 
