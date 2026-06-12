@@ -1,100 +1,123 @@
 [
+
   {
-    "id": "1.even",
+    "id": "0.isOvenReady",
     "parameters": 1,
-    "call_method": "countEven",
-    "start_method": "public static int countEven(int [] values)\n{\n    int count;\n    count = 0;\n    for (int i = 0; i < values.length; i++)\n    {\n        if (values[i] % 2 != 1)\n        {\n            count = count + 1;\n        }\n        else\n        {\n            count = count;\n        }\n    }\n    return count;\n}",
-    "description": "The countEven method returns the number of even integers in the values-array. Example test case: {1,2,3,4,5} returns 2. You don't have to deal with negative numbers.",
-    "result_type": "int",
-    "tests": [
-      { "inputs": [[1, 2, 3, 4, 5]], "expected": 2 },
-      { "inputs": [[2, 0, 4]], "expected": 3 },
-      { "inputs": [[]], "expected": 0, "comment": "Empty list returns 0." },
-      { "inputs": [[2]], "expected": 1 },
-      { "inputs": [[1, 3, 5, 7]], "expected": 0 },
-      { "inputs": [[22, 33, 1, 4, 8, 0, 88, 8, 1]], "expected": 6 }
-    ]
-  },
-  {
-    "id": "2.sumValues",
-    "parameters": 2,
-    "call_method": "sumValues",
-    "start_method": "public static int sumValues(int[] values, boolean positivesOnly)\n{\n    int sum = 0;\n    for (int i = 0; i < values.length; i++)\n    {\n        if (positivesOnly == true)\n        {\n            if (values[i] >= 0)\n            {\n                sum += values[i];\n            }\n        } else\n        {\n            sum += values[i];\n        }\n    }\n    return sum;\n}",
-    "description": "The sumValues method adds up all numbers from the values-array, or only the positive numbers if the positivesOnly boolean parameter is set to true. Example test case: calling sumvalues with {1,2,3,4,-5} and true returns 10.",
-    "result_type": "int",
-    "tests": [
-      { "inputs": [[1, 2, 3, 4, -5], true], "expected": 10 },
-      { "inputs": [[1, 2, 3, 4, -5], false], "expected": 5 },
-      { "inputs": [[-1, 2, -3, 4, -5], false], "expected": -3 },
-      { "inputs": [[-1, 2, -3, 4, -5, 6], true], "expected": 12 },
-      { "inputs": [[], true], "expected": 0, "comment": "Empty list has no numbers." },
-      { "inputs": [[-9], true], "expected": 0 }
-    ]
-  },
-  {
-    "id": "3.oddSum",
-    "parameters": 1,
-    "call_method": "oddSum",
-    "start_method": "public static int oddSum(int[] array)\n{\n    int total = 0;\n    boolean stop = false;\n    for (int i = 1; i < array.length; i = i + 2)\n    {\n        if (stop == false)\n        {\n            if (array[i] != -1)\n            {\n                total += array[i];\n            }\n            else if (array[i] == -1)\n            {\n                stop = true;\n            }\n        }\n        else\n        {\n            total = total;\n        }\n    }\n    return total;\n}",
-    "description": "The method oddSum returns the sum of all numbers at an odd index in the array parameter, until the number -1 is seen at an odd index. Example test case: {44, 12, 20, 1, -1, 3, 5,-1, 99, 4} returns 16 (12+1+3)",
-    "result_type": "int",
-    "tests": [
-      { "inputs": [[44, 12, 20, 1, -1, 3, 5, -1, 99, 4]], "expected": 16 },
-      { "inputs": [[]], "expected": 0, "comment": "Empty array has no odd-index elements." },
-      { "inputs": [[1]], "expected": 0, "comment": "Only one element at index 0 (not odd)." },
-      { "inputs": [[1, 2, 3, -2, 3, 9]], "expected": 9, "comment": "Indexes 1, 3, 5: 2, -2, 9 → 9" },
-      { "inputs": [[1, -1]], "expected": 0, "comment": "Stops at index 1 immediately." },
-      { "inputs": [[1, 2, 3, 4, 5]], "expected": 6, "comment": "Indexes 1, 3: 2+4=6" },
-      { "inputs": [[1, 2, 3, 0, 4, 5, 6, -1]], "expected": 7, "comment": "Indexes 1,3,5,7: 2+0+5=7 (stops at -1)" }
-    ]
-  },
-  {
-    "id": "4.score",
-    "parameters": 2,
-    "call_method": "calculateScore",
-    "start_method": "public static int calculateScore(int changes, int day)\n{\n    int score = 10;\n    for (int i = 0; i < changes; i++)\n    {\n        score = score - 1;\n    }\n    if (day == 6 || day == 7)\n    {\n        return score;\n    }\n    else\n    {\n        score = score - 3;\n        return score;\n    }\n}",
-    "description": "The calculateScore method calculates the score for a train trip. The highest score is 10. The score is based on the number of changes and the day of the week (Monday is 1, Sunday is 7). Dutch Railways (NS) has designed the following calculation:<br>Base score: 10<br>For each change: -1<br>Trip on a weekday: -3. Example test case: for a trip with 2 changes on a Wednesday (day 3), calculateScore(2, 3) returns a score of 5 (10-2-3)",
-    "result_type": "int",
-    "tests": [
-      { "inputs": [2, 3], "expected": 5, "comment": "2 changes, weekday (10-2-3)" },
-      { "inputs": [1, 4], "expected": 6, "comment": "1 change, weekday (10-1-3)" },
-      { "inputs": [5, 1], "expected": 2, "comment": "5 changes, Monday (10-5-3)" },
-      { "inputs": [2, 7], "expected": 8, "comment": "2 changes, Sunday (10-2)" },
-      { "inputs": [0, 6], "expected": 10, "comment": "0 changes, Saturday (10)" },
-      { "inputs": [0, 5], "expected": 7, "comment": "0 changes, Friday (10-3)" },
-      { "inputs": [10, 1], "expected": -3, "comment": "10 changes, Monday (10-10-3)" }
-    ]
-  },
-  {
-    "id": "5.double",
-    "parameters": 2,
-    "call_method": "hasDoubled",
-    "start_method": "public static int hasDoubled(double savings, int interest)\n{\n    double target = 2 * savings;\n    int years;\n    for (years = 0; ; )\n    {\n        if(target > savings)\n        {\n            savings *= interest/100.0 + 1;\n            years++;\n        }\n        else if (target <= savings)\n        {\n            break;\n        }\n    }\n    return years;\n}",
-    "description": "Write a program that calculates in how many years your savings have doubled with the given interest (as a percentage). An example: if your savings are 1000 euros and the interest is 4%, it will take you 18 years to double your savings (then you'll have more than 2000 euros).",
-    "result_type": "int",
-    "tests": [
-      { "inputs": [1000.0, 4], "expected": 18, "comment": "1000 at 4% interest takes 18 years to exceed 2000" },
-      { "inputs": [1.0, 10], "expected": 8, "comment": "1.0 at 10% interest takes 8 years to exceed 2.0" },
-      { "inputs": [25.0, 100], "expected": 1, "comment": "100% interest doubles in 1 year" },
-      { "inputs": [25.0, 2], "expected": 36, "comment": "2% interest takes 36 years to double" },
-      { "inputs": [22.5, 8], "expected": 10, "comment": "22.5 at 8% interest takes 10 years to exceed 45.0" },
-      { "inputs": [999.0, 1], "expected": 70, "comment": "Low interest of 1% takes 70 years to double" }
-    ]
-  },
-  {
-    "id": "6.sumIsEven",
-    "parameters": 2,
-    "call_method": "sumIsEven",
-    "start_method": "public static boolean sumIsEven(int[] values, boolean positivesOnly)\n{\n    int sum = 0;\n    for (int i = 0; i < values.length; i++)\n    {\n        sum += values[i];\n        if (positivesOnly && values[i] < 0)\n        {\n            sum -= values[i];\n        }\n    }\n    if (sum % 2 != 1)\n    {\n        return true;\n    }\n    else\n    {\n        return false;\n    }\n}",
-    "description": "The sumIsEven method returns true if the sum of elements in the array is even. If 'positivesOnly' is true, it only sums positive values. Example: sumIsEven({1, 2, 3, 4, -5}, true) returns true, because 1+2+3+4 = 10, which is even.",
+    "call_method": "isOvenReady",
+    "start_method": "public static boolean isOvenReady(int temperature) {\n    boolean isReady;\n    if (temperature >= 150 && temperature <= 250) {\n        isReady = true;\n    } else {\n        isReady = false;\n    }\n    return isReady;\n}",
+    "description": "The isOvenReady method checks whether an oven is ready for baking. An oven is considered ready when its temperature is between 150°C and 250°C (inclusive).",
     "result_type": "boolean",
     "tests": [
-      { "inputs": [[1, 2, 3, 4, -5], true], "expected": "true", "comment": "Sum of positives: 1+2+3+4=10, even" },
-      { "inputs": [[1, 2, 3, 4, -5], false], "expected": "false", "comment": "Sum including negative: 1+2+3+4+(-5)=5, odd" },
-      { "inputs": [[-1, -2, -3], true], "expected": "true", "comment": "No positives => sum = 0, even" },
-      { "inputs": [[], false], "expected": "true", "comment": "Empty list => sum = 0, even" },
-      { "inputs": [[1], false], "expected": "false", "comment": "Sum = 1, odd" },
-      { "inputs": [[2, 4, 6], true], "expected": "true", "comment": "Sum = 12, even" }
+        { "inputs": [-1], "expected": false },
+        { "inputs": [0], "expected": false },
+        { "inputs": [149], "expected": false },
+        { "inputs": [150], "expected": true },
+        { "inputs": [151], "expected": true },
+        { "inputs": [249], "expected": true },
+        { "inputs": [250], "expected": true },
+        { "inputs": [251], "expected": false }
+    ]
+  },
+
+  {
+    "id": "1.busTicketPrice",
+    "parameters": 1,
+    "call_method": "calculateBusTicketPrice",
+    "start_method": "public static double calculateBusTicketPrice(int age) {\n    double ticketPrice = 3.0;\n    if (age < 12 || age > 65) {\n        return ticketPrice;\n    } else {\n        ticketPrice = ticketPrice + 2;\n        return ticketPrice;\n    }\n}",
+    "description": "The calculateBusTicketPrice method calculates the bus ticket price for a single trip. Children under 12 and seniors over 65 pay €3.00. All other passengers pay an additional €2.00 on top of the standard ticket price.",
+    "result_type": "double",
+    "tests": [
+        { "inputs": [11], "expected": 3 },
+        { "inputs": [12], "expected": 5 },
+        { "inputs": [65], "expected": 5 },
+        { "inputs": [66], "expected": 3 }
+    ]
+  },
+
+  {
+    "id": "2.productDiscount",
+    "parameters": 2,
+    "call_method": "calculateProductDiscount",
+    "start_method": "public static double calculateProductDiscount(double price, boolean onlineOrder) {\n    double discount = 0.0;\n    if (onlineOrder == true) {\n        if (price > 100.0) {\n            discount = 5.0;\n        }\n    } else {\n        discount = 5.0;\n    }\n    return discount;\n}",
+    "description": "The calculateProductDiscount method calculates the discount for a retail store. The online store offers a €5.00 discount for orders above €100. The physical store offers a €5.00 discount for all orders.",
+    "result_type": "double",
+    "tests": [
+        { "inputs": [99.9, true], "expected": 0 },
+        { "inputs": [100.0, true], "expected": 0 },
+        { "inputs": [100.1, true], "expected": 5 },
+        { "inputs": [99.9, false], "expected": 5 },
+        { "inputs": [100.0, false], "expected": 5 },
+        { "inputs": [100.1, false], "expected": 5 }
+    ]
+  },
+
+  {
+    "id": "3.chargingTime",
+    "parameters": 1,
+    "call_method": "calculateChargingTimeMinutes",
+    "start_method": "public static int calculateChargingTimeMinutes(int initialBatteryLevel) {\n    int minutesPassed = 0;\n    int fullChargeLevel = 100;\n    int batteryLevel = initialBatteryLevel;\n    while (true) {\n        if (batteryLevel >= fullChargeLevel) {\n            break;\n        } else if (batteryLevel <= 80) {\n            batteryLevel = batteryLevel + 2;\n            minutesPassed = minutesPassed + 1;\n        } else if (batteryLevel > 80) {\n            batteryLevel = batteryLevel + 1;\n            minutesPassed = minutesPassed + 1;\n        }\n    }\n    return minutesPassed;\n}",
+    "description": "The calculateChargingTimeMinutes method calculates how many minutes it takes to fully charge (100%) a smartphone. Starting from an initial battery level, the smartphone charges at 2% per minute if the battery level is 80% or below, and 1% per minute if above 80%.",
+    "result_type": "int",
+    "tests": [
+        { "inputs": [0], "expected": 59 },
+        { "inputs": [30], "expected": 44 },
+        { "inputs": [45], "expected": 37 },
+        { "inputs": [79], "expected": 20 },
+        { "inputs": [80], "expected": 19 },
+        { "inputs": [81], "expected": 19 },
+        { "inputs": [99], "expected": 1 },
+        { "inputs": [100], "expected": 0 }
+    ]
+  },
+
+  {
+    "id": "4.largestNumber",
+    "parameters": 1,
+    "call_method": "largestNumber",
+    "start_method": "public static int largestNumber(int[] numbers) {\n    int largest = numbers[0];\n    int i = 0;\n    boolean isNegative = false;\n    while (i < numbers.length && isNegative == false) {\n        if (numbers[i] < 0) {\n            isNegative = true;\n        }\n        if (numbers[i] >= 0 && numbers[i] > largest) {\n            largest = numbers[i];\n            continue;\n        }\n        i++;\n    }\n    return largest;\n}",
+    "description": "The largestNumber method returns the largest number from a non-empty array. The search stops if a negative number is encountered. The array is guaranteed to be non-empty.",
+    "result_type": "int",
+    "tests": [
+        { "inputs": [[3, 7, 2, 10, 0, 20, 50, 30]], "expected": 50 },
+        { "inputs": [[3, 7, 2, 10, -1, 20, 50, 30]], "expected": 10 },
+        { "inputs": [[0, 3, 7, 2]], "expected": 7 }
+    ]
+  },
+
+  {
+    "id": "5.bonusEligibility",
+    "parameters": 2,
+    "call_method": "isEligibleForBonus",
+    "start_method": "public static boolean isEligibleForBonus(int[] homeworkGrades, boolean exemption) {\n    int bonusPoints = 0;\n    for (int i = 0; i < homeworkGrades.length; i++) {\n        if (exemption == false) {\n            if (homeworkGrades[i] >= 80) {\n                bonusPoints += 1;\n            }\n        } else {\n            bonusPoints += 1;\n        }\n    }\n    if (bonusPoints < 5) {\n        return false;\n    } else {\n        return true;\n    }\n}",
+    "description": "The isEligibleForBonus method determines whether a student receives a bonus for their final course grade. A student is eligible if they accumulate at least 5 homework points. If the student has an exemption, they earn 1 point per submitted homework. Otherwise, they earn 1 point per homework with a grade of 80 or higher.",
+    "result_type": "boolean",
+    "tests": [
+        { "inputs": [[80, 80, 80, 80, 80], false], "expected": true },
+        { "inputs": [[80, 80, 80, 80], false], "expected": false },
+        { "inputs": [[79, 79, 79, 79, 79], false], "expected": false },
+        { "inputs": [[79, 79, 79, 79, 79], true], "expected": true },
+        { "inputs": [[50, 80, 90, 40], true], "expected": false },
+        { "inputs": [[50, 60, 70, 80, 90], false], "expected": false },
+        { "inputs": [[80, 80, 79, 80, 79], false], "expected": false },
+        { "inputs": [[30, 40, 70, 50, 60], true], "expected": true }
+    ]
+  },
+
+  {
+    "id": "6.dailySalary",
+    "parameters": 3,
+    "call_method": "calculateDailySalary",
+    "start_method": "public static double calculateDailySalary(boolean weekDay, boolean dayShift, int workedHours) {\n    double baseHourSalary = 15.0;\n    if (weekDay && dayShift) {\n        return baseHourSalary * workedHours;\n    } else {\n        baseHourSalary = baseHourSalary + (baseHourSalary / 2);\n        return baseHourSalary * workedHours;\n    }\n}",
+    "description": "The calculateDailySalary method calculates the daily salary of an employee. The base hourly salary is €15.00. Employees working on weekdays and day shifts receive the standard rate. Otherwise, the hourly rate is increased by 50%.",
+    "result_type": "double",
+    "tests": [
+        { "inputs": [true, true, 0], "expected": 0 },
+        { "inputs": [true, true, 2], "expected": 30 },
+        { "inputs": [false, false, 4], "expected": 90 },
+        { "inputs": [false, false, 6], "expected": 135 },
+        { "inputs": [true, true, 3], "expected": 45 },
+        { "inputs": [true, false, 1], "expected": 22.5 },
+        { "inputs": [false, true, 5], "expected": 112.5 }
     ]
   }
 ]
