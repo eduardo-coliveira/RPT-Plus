@@ -8,14 +8,14 @@
     "description": "The isOvenReady method checks whether an oven is ready for baking. An oven is considered ready when its temperature is between 150°C and 250°C (inclusive).",
     "result_type": "boolean",
     "tests": [
-        { "inputs": [-1], "expected": false },
-        { "inputs": [0], "expected": false },
-        { "inputs": [149], "expected": false },
-        { "inputs": [150], "expected": true },
-        { "inputs": [151], "expected": true },
-        { "inputs": [249], "expected": true },
-        { "inputs": [250], "expected": true },
-        { "inputs": [251], "expected": false }
+        { "inputs": [-1], "expected": "false" },
+        { "inputs": [0], "expected": "false" },
+        { "inputs": [149], "expected": "false" },
+        { "inputs": [150], "expected": "true" },
+        { "inputs": [151], "expected": "true" },
+        { "inputs": [249], "expected": "true" },
+        { "inputs": [250], "expected": "true" },
+        { "inputs": [251], "expected": "false" }
     ]
   },
 
@@ -27,10 +27,10 @@
     "description": "The calculateBusTicketPrice method calculates the bus ticket price for a single trip. Children under 12 and seniors over 65 pay €3.00. All other passengers pay an additional €2.00 on top of the standard ticket price.",
     "result_type": "double",
     "tests": [
-        { "inputs": [11], "expected": 3 },
-        { "inputs": [12], "expected": 5 },
-        { "inputs": [65], "expected": 5 },
-        { "inputs": [66], "expected": 3 }
+        { "inputs": [11], "expected": 3.0 },
+        { "inputs": [12], "expected": 5.0 },
+        { "inputs": [65], "expected": 5.0 },
+        { "inputs": [66], "expected": 3.0 }
     ]
   },
 
@@ -42,12 +42,12 @@
     "description": "The calculateProductDiscount method calculates the discount for a retail store. The online store offers a €5.00 discount for orders above €100. The physical store offers a €5.00 discount for all orders.",
     "result_type": "double",
     "tests": [
-        { "inputs": [99.9, true], "expected": 0 },
-        { "inputs": [100.0, true], "expected": 0 },
-        { "inputs": [100.1, true], "expected": 5 },
-        { "inputs": [99.9, false], "expected": 5 },
-        { "inputs": [100.0, false], "expected": 5 },
-        { "inputs": [100.1, false], "expected": 5 }
+        { "inputs": [99.9, true], "expected": 0.0 },
+        { "inputs": [100.0, true], "expected": 0.0 },
+        { "inputs": [100.1, true], "expected": 5.0 },
+        { "inputs": [99.9, false], "expected": 5.0 },
+        { "inputs": [100.0, false], "expected": 5.0 },
+        { "inputs": [100.1, false], "expected": 5.0 }
     ]
   },
 
@@ -92,14 +92,14 @@
     "description": "The isEligibleForBonus method determines whether a student receives a bonus for their final course grade. A student is eligible if they accumulate at least 5 homework points. If the student has an exemption, they earn 1 point per submitted homework. Otherwise, they earn 1 point per homework with a grade of 80 or higher.",
     "result_type": "boolean",
     "tests": [
-        { "inputs": [[80, 80, 80, 80, 80], false], "expected": true },
-        { "inputs": [[80, 80, 80, 80], false], "expected": false },
-        { "inputs": [[79, 79, 79, 79, 79], false], "expected": false },
-        { "inputs": [[79, 79, 79, 79, 79], true], "expected": true },
-        { "inputs": [[50, 80, 90, 40], true], "expected": false },
-        { "inputs": [[50, 60, 70, 80, 90], false], "expected": false },
-        { "inputs": [[80, 80, 79, 80, 79], false], "expected": false },
-        { "inputs": [[30, 40, 70, 50, 60], true], "expected": true }
+        { "inputs": [[80, 80, 80, 80, 80], false], "expected": "true" },
+        { "inputs": [[80, 80, 80, 80], false], "expected": "false" },
+        { "inputs": [[79, 79, 79, 79, 79], false], "expected": "false" },
+        { "inputs": [[79, 79, 79, 79, 79], true], "expected": "true" },
+        { "inputs": [[50, 80, 90, 40], true], "expected": "false" },
+        { "inputs": [[50, 60, 70, 80, 90], false], "expected": "false" },
+        { "inputs": [[80, 80, 79, 80, 79], false], "expected": "false" },
+        { "inputs": [[30, 40, 70, 50, 60], true], "expected": "true" }
     ]
   },
 
@@ -111,11 +111,11 @@
     "description": "The calculateDailySalary method calculates the daily salary of an employee. The base hourly salary is €15.00. Employees working on weekdays and day shifts receive the standard rate. Otherwise, the hourly rate is increased by 50%.",
     "result_type": "double",
     "tests": [
-        { "inputs": [true, true, 0], "expected": 0 },
-        { "inputs": [true, true, 2], "expected": 30 },
-        { "inputs": [false, false, 4], "expected": 90 },
-        { "inputs": [false, false, 6], "expected": 135 },
-        { "inputs": [true, true, 3], "expected": 45 },
+        { "inputs": [true, true, 0], "expected": 0.0 },
+        { "inputs": [true, true, 2], "expected": 30.0 },
+        { "inputs": [false, false, 4], "expected": 90.0 },
+        { "inputs": [false, false, 6], "expected": 135.0 },
+        { "inputs": [true, true, 3], "expected": 45.0 },
         { "inputs": [true, false, 1], "expected": 22.5 },
         { "inputs": [false, true, 5], "expected": 112.5 }
     ]
