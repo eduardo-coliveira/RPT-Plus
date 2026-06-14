@@ -38,6 +38,9 @@ class HintRequest(BaseModel):
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+class LogoutRequest(BaseModel):
+    username: str
     
 class ActionLogRequest(BaseModel):
     username: str

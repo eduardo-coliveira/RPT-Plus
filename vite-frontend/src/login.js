@@ -45,6 +45,7 @@ async function handleLoginSubmit(event) {
 
     const user = await response.json();
     window.currentUser = user;
+    sessionStorage.setItem('loggedInUser', user.username);
     document.getElementById("loginOverlay").style.display = "none";
     showAppShell();
 
@@ -62,6 +63,18 @@ async function handleLoginSubmit(event) {
 export function initLogin() {
   const form = document.getElementById("loginForm");
   form?.addEventListener("submit", handleLoginSubmit);
+
+  window.addEventListener('beforeunload', () => {
+    const loggedInUser = sessionStorage.getItem('loggedInUser');
+    if (loggedInUser) {
+      const blob = new Blob(
+        [JSON.stringify({ username: loggedInUser })],
+        { type: 'application/json' }
+      );
+      navigator.sendBeacon('/logout', blob);
+    }
+  });
+
 }
 
 window.initLogin = initLogin;

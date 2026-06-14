@@ -85,6 +85,18 @@ export async function initApp() {
     await loadExercise(currentExerciseId);  // Load FIRST
     await logUserAction("NewExercise");     // Log AFTER
   });
+
+  window.addEventListener('beforeunload', () => {
+    const loggedInUser = sessionStorage.getItem('loggedInUser');
+    if (loggedInUser) {
+      const blob = new Blob(
+        [JSON.stringify({ username: loggedInUser })],
+        { type: 'application/json' }
+      );
+      navigator.sendBeacon('/logout', blob);
+    }
+  });
+
 }
 
 window.startApp = initApp;

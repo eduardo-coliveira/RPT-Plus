@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
-from backend.schemas import CodeRequest, HintRequest, DiagnoseRequest, ActionLogRequest, LoginRequest
+from backend.schemas import CodeRequest, HintRequest, DiagnoseRequest, ActionLogRequest, LoginRequest, LogoutRequest
 from backend.prompting import get_client_wrapper
 # from refactoring_misconceptions.errors import ALL_SNIPPETS
 # from mistralai.client import Mistral
@@ -31,33 +31,32 @@ load_dotenv()
 # === FastAPI App Setup ===
 
 RATE_LIMIT_SECONDS = 10
-LOGIN_LOCK_TTL_SECONDS = 900
+LOGIN_LOCK_TTL_SECONDS = 2400
 
 _active_user_sessions: Dict[str, float] = {}
 _last_request_time: Dict[str, float] = {}
 _user_lock = RLock()
 
 
-def _prune_expired_user_sessions(now: float) -> None:
+def _claim_user_session(username: str) -> bool:
+    with app.state.user_lock:
+        now = time.time()
+        _prune_expired_user_sessions(now, app.state.active_user_sessions)
+        # print(f"Active sessions (ID: {id(app.state.active_user_sessions)}): {app.state.active_user_sessions}")
+        if username in app.state.active_user_sessions:
+            print(f"User {username} already logged in")
+            return False
+        app.state.active_user_sessions[username] = now
+        print(f"Added user {username} to sessions: {app.state.active_user_sessions}")
+        return True
+
+def _prune_expired_user_sessions(now: float, sessions: Dict[str, float]) -> None:
     expired_users = [
-        username for username, locked_at in _active_user_sessions.items()
+        username for username, locked_at in sessions.items()
         if now - locked_at >= LOGIN_LOCK_TTL_SECONDS
     ]
     for username in expired_users:
-        _active_user_sessions.pop(username, None)
-
-
-def _claim_user_session(username: str) -> bool:
-    with _user_lock:
-        now = time.time()
-        _prune_expired_user_sessions(now)
-
-        if username in _active_user_sessions:
-            return False
-
-        _active_user_sessions[username] = now
-        return True
-
+        sessions.pop(username, None)
 
 # def _enforce_rate_limit(username: str) -> None:
 #     with _user_lock:
@@ -75,7 +74,10 @@ def _claim_user_session(username: str) -> bool:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db()  # Sync code is fine here
+    # Initialize state
+    app.state.active_user_sessions = {}
+    app.state.user_lock = RLock()
+    init_db()
     yield
 
 app = FastAPI(lifespan=lifespan)
@@ -107,6 +109,14 @@ async def login(data: LoginRequest):
         raise HTTPException(status_code=409, detail="This user is already logged in elsewhere.")
 
     return {"username": user["username"], "group": user["group_name"]}
+
+@app.post("/logout")
+async def logout(request: LogoutRequest):
+    username = request.username
+    print(f"Logout request for user: {username}")
+    with app.state.user_lock:
+        app.state.active_user_sessions.pop(username, None)
+    return {"message": f"User {username} logged out"}
 
 JUDGE0_URL = "https://ce.judge0.com/submissions"
 
@@ -311,9 +321,9 @@ async def get_hint_tree(data: HintRequest):
             "hint_group": hint_group,
             # "errors": ALL_SNIPPETS
         }
-        print(f'Diagnosis: {diagnosis_status}')
-        print(f'Previous:\n{data.previous_code}')
-        print(f'Current:\n{data.submitted_code}')
+        # print(f'Diagnosis: {diagnosis_status}')
+        # print(f'Previous:\n{data.previous_code}')
+        # print(f'Current:\n{data.submitted_code}')
         # if hint_group == "STEP-BASED" and diagnosis_status == "notequiv":
         #     print("Step-based + RM feedback :)")
         #     suggested = app.state.client_wrapper.call("STEP_BASED_SUGGESTED", prompt_data)
@@ -385,10 +395,10 @@ async def get_notequiv_feedback(data: DiagnoseRequest):
             "method_explanation": ex["description"]
         }
         if data.hint_group == "STATE-BASED":
-            print("State-based feedback")
+            # print("State-based feedback")
             response = app.state.client_wrapper.call("ERROR", prompt_data)
         else:
-            print("Step-based feedback")
+            # print("Step-based feedback")
             response = app.state.client_wrapper.call("STEP_ERROR", prompt_data)
         return {
             "error_summary": response.error_summary
