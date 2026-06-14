@@ -112,7 +112,8 @@ JUDGE0_URL = "https://ce.judge0.com/submissions"
 
 # === Load Exercises ===
 
-with open(os.path.join("exercise_data","exercises.json")) as f:
+# with open(os.path.join("exercise_data","exercises.json")) as f:
+with open(os.path.join("exercise_data","exercises_python.json")) as f:
     EXERCISES = {ex["id"]: ex for ex in json.load(f)}
 
 
@@ -137,6 +138,11 @@ def list_exercises():
     return [{"id": ex["id"], "description": ex["description"]} for ex in EXERCISES.values()]
 
 
+@app.get("/exercises_python")
+def list_python_exercises():
+    return [{"id": ex["id"], "description": ex["description"]} for ex in EXERCISES.values()]
+
+
 @app.get("/exercise/{exercise_id}")
 def get_exercise(exercise_id: str):
     ex = EXERCISES.get(exercise_id)
@@ -148,7 +154,8 @@ def get_exercise(exercise_id: str):
 @app.post("/run_code")
 async def run_code(data: CodeRequest):
     judge0_data = {
-        "language_id": 62,  # Java (OpenJDK 13.0.1)
+        # "language_id": 62,  # Java (OpenJDK 13.0.1)
+        "language_id": 71,  # Python 3
         "source_code": data.code,
         "stdin": "",
         "expected_output": None
@@ -165,8 +172,10 @@ async def run_code(data: CodeRequest):
         error_output = result.get("compile_output", "") or result.get("stderr", "")
         
         return {
-            "language": "java",
-            "version": "17.0.4",
+            # "language": "java",
+            # "version": "17.0.4",
+            "language": "python",
+            "version": "3.10.0",
             "run": {
                 "code": result.get("exit_code", 1),
                 "signal": None,
@@ -187,11 +196,14 @@ async def diagnose(data: DiagnoseRequest):
     if not ex:
         raise HTTPException(status_code=404, detail="Exercise not found")
 
-    full_code = build_java_program(data.submitted_code, generate_test_code(ex["call_method"], ex["result_type"], ex["tests"]))
+    # full_code = build_java_program(data.submitted_code, generate_test_code(ex["call_method"], ex["result_type"], ex["tests"]))
+
+    full_code = data.submitted_code + "\n" + generate_test_code(ex["call_method"], ex["result_type"], ex["tests"])
 
     try:
         judge0_data = {
-            "language_id": 62,  # Java (OpenJDK 13.0.1)
+            # "language_id": 62,  # Java (OpenJDK 13.0.1)
+            "language_id": 71,  # Python 3
             "source_code": full_code,
             "stdin": "",
             "expected_output": None
@@ -400,15 +412,30 @@ public static void main(String[] args) {{
 
 
 def generate_test_code(call_method: str, result_type:str, tests: List[Dict]) -> str:
+    # def format_input(arg):
+    #     if isinstance(arg, list):
+    #         if len(arg) > 0:
+    #             element_type = type(arg[0]).__name__  # gets the type name as string
+    #         else:
+    #             element_type = 'int'  
+    #         return f"new {element_type}[]{{{','.join(map(str, arg))}}}"
+    #     if isinstance(arg, bool):
+    #         return str(arg).lower()  # Java uses lowercase: true / false
+    #     return str(arg)
+
+    # lines = []
+    # for i, test in enumerate(tests):
+    #     inputs = ", ".join(format_input(arg) for arg in test["inputs"])
+    #     expected = test["expected"]
+    #     call = f"{call_method}({inputs})"
+    #     lines.append(f'{result_type} result{i} = {call};\nSystem.out.println("TEST_RESULT:{i}|expected={expected}|actual=" + result{i});')
+
+    # return "\n".join(lines)
     def format_input(arg):
         if isinstance(arg, list):
-            if len(arg) > 0:
-                element_type = type(arg[0]).__name__  # gets the type name as string
-            else:
-                element_type = 'int'  
-            return f"new {element_type}[]{{{','.join(map(str, arg))}}}"
+            return str(arg)  # Python lists are directly usable
         if isinstance(arg, bool):
-            return str(arg).lower()  # Java uses lowercase: true / false
+            return str(arg)  # Python uses True/False
         return str(arg)
 
     lines = []
@@ -416,7 +443,7 @@ def generate_test_code(call_method: str, result_type:str, tests: List[Dict]) -> 
         inputs = ", ".join(format_input(arg) for arg in test["inputs"])
         expected = test["expected"]
         call = f"{call_method}({inputs})"
-        lines.append(f'{result_type} result{i} = {call};\nSystem.out.println("TEST_RESULT:{i}|expected={expected}|actual=" + result{i});')
+        lines.append(f'result{i} = {call}\nprint(f"TEST_RESULT:{i}|expected={expected}|actual={{result{i}}}")')
 
     return "\n".join(lines)
 

@@ -95,7 +95,7 @@ async function loadExercises() {
   const select = document.getElementById("exerciseSelect");
   select.innerHTML = "";
 
-  let defaultExercise = exercises.find(ex => ex.id === "1.even") || exercises[0];
+  let defaultExercise = exercises.find(ex => ex.id === "0.isOvenReady") || exercises[0];
   currentExerciseId = defaultExercise.id;
 
   exercises.forEach((ex) => {
@@ -659,6 +659,9 @@ function formatSuggestedRefactoringWithHints(step, index) {
 }
 
 function renderHintTree(tree) {
+
+  console.log("Hint tree: ", tree);
+
   clearMessages();
   const container = document.getElementById("hints");
   container.innerHTML = "";

@@ -1,0 +1,123 @@
+[
+
+  {
+    "id": "0.isOvenReady",
+    "parameters": 1,
+    "call_method": "is_oven_ready",
+    "start_method": "def is_oven_ready(temperature):\n    is_ready = False\n    if temperature >= 150 and temperature <= 250:\n        is_ready = True\n    else:\n        is_ready = False\n    return is_ready",
+    "description": "The is_oven_ready function checks whether an oven is ready for baking. An oven is considered ready when its temperature is between 150°C and 250°C (inclusive).",
+    "result_type": "bool",
+    "tests": [
+        { "inputs": [-1], "expected": "False" },
+        { "inputs": [0], "expected": "False" },
+        { "inputs": [149], "expected": "False" },
+        { "inputs": [150], "expected": "True" },
+        { "inputs": [151], "expected": "True" },
+        { "inputs": [249], "expected": "True" },
+        { "inputs": [250], "expected": "True" },
+        { "inputs": [251], "expected": "False" }
+    ]
+  },
+
+  {
+    "id": "1.busTicketPrice",
+    "parameters": 1,
+    "call_method": "calculate_bus_ticket_price",
+    "start_method": "def calculate_bus_ticket_price(age):\n    ticket_price = 3.0\n    if age < 12 or age > 65:\n        return ticket_price\n    else:\n        ticket_price = ticket_price + 2\n        return ticket_price",
+    "description": "The calculate_bus_ticket_price function calculates the bus ticket price for a single trip. Children under 12 and seniors over 65 pay €3.00. All other passengers pay an additional €2.00 on top of the standard ticket price.",
+    "result_type": "float",
+    "tests": [
+        { "inputs": [11], "expected": 3.0 },
+        { "inputs": [12], "expected": 5.0 },
+        { "inputs": [65], "expected": 5.0 },
+        { "inputs": [66], "expected": 3.0 }
+    ]
+  },
+
+  {
+    "id": "2.productDiscount",
+    "parameters": 2,
+    "call_method": "calculate_product_discount",
+    "start_method": "def calculate_product_discount(price, online_order):\n    discount = 0.0\n    if online_order == True:\n        if price > 100.0:\n            discount = 5.0\n    else:\n        discount = 5.0\n    return discount",
+    "description": "The calculate_product_discount function calculates the discount for a retail store. The online store offers a €5.00 discount for orders above €100. The physical store offers a €5.00 discount for all orders.",
+    "result_type": "float",
+    "tests": [
+        { "inputs": [99.9, true], "expected": 0.0 },
+        { "inputs": [100.0, true], "expected": 0.0 },
+        { "inputs": [100.1, true], "expected": 5.0 },
+        { "inputs": [99.9, false], "expected": 5.0 },
+        { "inputs": [100.0, false], "expected": 5.0 },
+        { "inputs": [100.1, false], "expected": 5.0 }
+    ]
+  },
+
+  {
+    "id": "3.chargingTime",
+    "parameters": 1,
+    "call_method": "calculate_charging_time_minutes",
+    "start_method": "def calculate_charging_time_minutes(initial_battery_level):\n    minutes_passed = 0\n    full_charge_level = 100\n    battery_level = initial_battery_level\n\n    while True:\n        if battery_level >= full_charge_level:\n            break\n        elif battery_level <= 80:\n            battery_level = battery_level + 2\n            minutes_passed = minutes_passed + 1\n        elif battery_level > 80:\n            battery_level = battery_level + 1\n            minutes_passed = minutes_passed + 1\n\n    return minutes_passed",
+    "description": "The calculate_charging_time_minutes function calculates how many minutes it takes to fully charge (100%) a smartphone. Starting from an initial battery level, the smartphone charges at 2% per minute if the battery level is 80% or below, and 1% per minute if above 80%.",
+    "result_type": "int",
+    "tests": [
+        { "inputs": [0], "expected": 59 },
+        { "inputs": [30], "expected": 44 },
+        { "inputs": [45], "expected": 37 },
+        { "inputs": [79], "expected": 20 },
+        { "inputs": [80], "expected": 19 },
+        { "inputs": [81], "expected": 19 },
+        { "inputs": [99], "expected": 1 },
+        { "inputs": [100], "expected": 0 }
+    ]
+  },
+
+  {
+    "id": "4.largestNumber",
+    "parameters": 1,
+    "call_method": "largest_number",
+    "start_method": "def largest_number(numbers):\n    largest = numbers[0]\n    i = 0\n    is_negative = False\n\n    while i < len(numbers) and is_negative == False:\n        if numbers[i] < 0:\n            is_negative = True\n        if numbers[i] >= 0 and numbers[i] > largest:\n            largest = numbers[i]\n            continue\n        i += 1\n\n    return largest",
+    "description": "The largest_number function returns the largest number from a non-empty list. The search stops if a negative number is encountered. The list is guaranteed to be non-empty.",
+    "result_type": "int",
+    "tests": [
+        { "inputs": [[3, 7, 2, 10, 0, 20, 50, 30]], "expected": 50 },
+        { "inputs": [[3, 7, 2, 10, -1, 20, 50, 30]], "expected": 10 },
+        { "inputs": [[0, 3, 7, 2]], "expected": 7 }
+    ]
+  },
+
+  {
+    "id": "5.bonusEligibility",
+    "parameters": 2,
+    "call_method": "is_eligible_for_bonus",
+    "start_method": "def is_eligible_for_bonus(homework_grades, exemption):\n    bonus_points = 0\n\n    for i in range(len(homework_grades)):\n        if exemption == False:\n            if homework_grades[i] >= 80:\n                bonus_points += 1\n        else:\n            bonus_points += 1\n\n    if bonus_points < 5:\n        return False\n    else:\n        return True",
+    "description": "The is_eligible_for_bonus function determines whether a student receives a bonus for their final course grade. A student is eligible if they accumulate at least 5 homework points. If the student has an exemption, they earn 1 point per submitted homework. Otherwise, they earn 1 point per homework with a grade of 80 or higher.",
+    "result_type": "bool",
+    "tests": [
+        { "inputs": [[80, 80, 80, 80, 80], false], "expected": "True" },
+        { "inputs": [[80, 80, 80, 80], false], "expected": "False" },
+        { "inputs": [[79, 79, 79, 79, 79], false], "expected": "False" },
+        { "inputs": [[79, 79, 79, 79, 79], true], "expected": "True" },
+        { "inputs": [[50, 80, 90, 40], true], "expected": "False" },
+        { "inputs": [[50, 60, 70, 80, 90], false], "expected": "False" },
+        { "inputs": [[80, 80, 79, 80, 79], false], "expected": "False" },
+        { "inputs": [[30, 40, 70, 50, 60], true], "expected": "True" }
+    ]
+  },
+
+  {
+    "id": "6.dailySalary",
+    "parameters": 3,
+    "call_method": "calculate_daily_salary",
+    "start_method": "def calculate_daily_salary(week_day, day_shift, worked_hours):\n    base_hour_salary = 15.0\n\n    if week_day and day_shift:\n        return base_hour_salary * worked_hours\n    else:\n        base_hour_salary = base_hour_salary + (base_hour_salary / 2)\n        return base_hour_salary * worked_hours",
+    "description": "The calculate_daily_salary function calculates the daily salary of an employee. The base hourly salary is €15.00. Employees working on weekdays and day shifts receive the standard rate. Otherwise, the hourly rate is increased by 50%.",
+    "result_type": "float",
+    "tests": [
+        { "inputs": [true, true, 0], "expected": 0.0 },
+        { "inputs": [true, true, 2], "expected": 30.0 },
+        { "inputs": [false, false, 4], "expected": 90.0 },
+        { "inputs": [false, false, 6], "expected": 135.0 },
+        { "inputs": [true, true, 3], "expected": 45.0 },
+        { "inputs": [true, false, 1], "expected": 22.5 },
+        { "inputs": [false, true, 5], "expected": 112.5 }
+    ]
+  }
+]
