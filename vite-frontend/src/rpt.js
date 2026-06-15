@@ -33,6 +33,7 @@ let lastHintedCode = "";
 let isGeneratingHints = false;
 let diagnosis = "";
 let lastDiagnosedCode = "";
+let cachedDiagnosisCode = "";
 
 async function logUserAction(action, details = {}) {
   const user = window.currentUser || { username: "anonymous", group: "unknown" };
@@ -126,7 +127,8 @@ async function loadExercises() {
 
 async function loadExercise(id) {
   clearMessages();
-  clearHints();
+  resetHintCache();
+  clearHintDisplay();
   hideSpinner();
   document.getElementById("newhint")?.remove();
   const res = await fetch(`${apiUrl}/exercise/${id}`);
@@ -165,14 +167,23 @@ async function loadExercise(id) {
 
 async function handleRun() {
   clearMessages();
-  clearHints();
-  currentHintTree = null;
-  currentHints = [];
-  lastHintedCode = "";
+  clearHintDisplay();
+  // currentHintTree = null;
+  // currentHints = [];
+  // lastHintedCode = "";
   submittedCode = editor.getValue();
 
+  // if (!isNewSubmission()) {
+  //   showMsg("You haven't changed the code.", msgtype.WARNING);
+  //   return;
+  // }
   if (!isNewSubmission()) {
-    showMsg("You haven't changed the code.", msgtype.WARNING);
+    const reused = await replayCachedDiagnosis();
+
+    if (!reused) {
+      showMsg("You haven't changed the code.", msgtype.WARNING);
+    }
+
     return;
   }
 
@@ -185,6 +196,7 @@ async function handleRun() {
   if (!response) return;
 
   diagnosis = response;
+  cachedDiagnosisCode = submittedCode.trim();
   lastDiagnosedCode = submittedCode;
 
   if (response.status === "compile_error") {
@@ -193,12 +205,16 @@ async function handleRun() {
       code_status: response.status || "unknown",
       feedback: response.message || null,
     });
+    previousCode = submittedCode;
     return handleError(response.message);
   }
 
   if (response.status === "notequiv") {
     // previousCode = submittedCode;
-    return handleNotEquivalent(response);
+    // return handleNotEquivalent(response);
+    await handleNotEquivalent(response);
+    previousCode = submittedCode;
+    return;
   }
 
   if (response.status === "correct") {
@@ -209,6 +225,7 @@ async function handleRun() {
       // feedback: feedback?.refactor_steps || null,
       feedback: JSON.stringify(feedback?.refactor_steps) || null,
     });
+    previousCode = submittedCode;
     // return handleCorrect();
     return;
   }
@@ -277,7 +294,7 @@ async function handleCorrect() {
   //   showMsg(improvementMsg, numHints > 0 ? msgtype.WARNING : msgtype.CORRECT);
   // }
 
-  previousCode = submittedCode;
+  //previousCode = submittedCode;
   return feedback;
 }
 
@@ -345,11 +362,7 @@ async function generateCorrectFeedback() {
 async function generateHints() {
   const currentEditorCode = editor.getValue();
   const codeChangedSinceLastDiagnosis = currentEditorCode.trim() !== lastDiagnosedCode.trim();
-  const hasCachedDiagnosis = Boolean(
-    diagnosis &&
-    typeof diagnosis.status === "string" &&
-    currentEditorCode.trim() === lastDiagnosedCode.trim()
-  );
+  const hasCachedDiagnosis = hasCachedDiagnosisForCurrentCode();
 
   let freshDiagnosis = hasCachedDiagnosis ? diagnosis : null;
 
@@ -459,10 +472,10 @@ async function generateHints() {
 
 async function handleHints() {
   clearMessages();
-  submittedCode = editor.getValue();
+  const currentEditorCode = editor.getValue();
 
   console.log("[handleHints] Invoked");
-  console.log("[handleHints] submittedCode:", submittedCode);
+  console.log("[handleHints] currentEditorCode:", currentEditorCode);
   console.log("[handleHints] lastHintedCode:", lastHintedCode);
 
   // const currentGroup = window.currentUser?.group;
@@ -486,18 +499,19 @@ async function handleHints() {
   }
 
   console.log("[handleHints] currentHintTree exists:", !!currentHintTree);
-  console.log("[handleHints] Code matches lastHintedCode:", submittedCode.trim() === lastHintedCode.trim());
+  console.log("[handleHints] Code matches lastHintedCode:", currentEditorCode.trim() === lastHintedCode.trim());
 
   // Only reuse a cached hint tree when it was generated from the exact current code snapshot.
-  if (currentHintTree && submittedCode.trim() === lastHintedCode.trim()) {
+  if (currentHintTree && currentEditorCode.trim() === lastHintedCode.trim()) {
     console.log("[handleHints] Reusing existing hint tree for the current code snapshot.");
-    lastHintedCode = submittedCode;
+    lastHintedCode = currentEditorCode;
     renderHintTree(currentHintTree);
     return;
   }
 
-  clearHints();
-  document.getElementById("hints").innerHTML = "";
+  // clearHints();
+  clearHintDisplay();
+  // document.getElementById("hints").innerHTML = "";
 
   // Otherwise, generate new hints
   console.log("[handleHints] No valid hint tree or code changed. Generating new hints...");
@@ -529,7 +543,8 @@ function waitForHintsToFinish(interval = 100) {
 
 
 function isNewSubmission() {
-  return (submittedCode.trim() !== previousCode.trim()) && (submittedCode.trim() !== previousFunctionalCode.trim());
+  // return (submittedCode.trim() !== previousCode.trim()) && (submittedCode.trim() !== previousFunctionalCode.trim());
+  return submittedCode.trim() !== cachedDiagnosisCode.trim();
 }
 
 function handleError(message) {
@@ -553,11 +568,23 @@ async function handleNotEquivalent(data) {
 
 
   // Spinner + fetch explanation
-  const feedback = await showMsgWithSpinner(
-    "Analyzing error and generating explanation... ",
-    msgtype.FAILURE,
-    generateNotEquivalentFeedback(data)
-  );
+  // const feedback = await showMsgWithSpinner(
+  //   "Analyzing error and generating explanation... ",
+  //   msgtype.FAILURE,
+  //   generateNotEquivalentFeedback(data)
+  // );
+
+  let feedback = data.notEquivalentFeedback;
+
+  if (!feedback) {
+    feedback = await showMsgWithSpinner(
+      "Analyzing error and generating explanation... ",
+      msgtype.FAILURE,
+      generateNotEquivalentFeedback(data)
+    );
+
+    data.notEquivalentFeedback = feedback;
+  }
 
   await logUserAction("Diagnose", {
     previous_code: previousCode,
@@ -931,12 +958,49 @@ function clearMessages() {
   document.getElementById("locationErrorBox").style.display = "none";
 }
 
-function clearHints() {
+function clearHintDisplay() {
   const hintsContainer = document.getElementById("hints");
   if (hintsContainer) hintsContainer.innerHTML = "";
+}
+
+function resetHintCache() {
   currentHintTree = null;
   currentHints = [];
-  lastHintedCode = "";
+  lastHintedCode = "";  
+}
+
+function hasCachedDiagnosisForCurrentCode() {
+  return (
+    diagnosis &&
+    typeof diagnosis.status === "string" &&
+    editor.getValue().trim() === lastDiagnosedCode.trim()
+  );
+}
+
+async function replayCachedDiagnosis() {
+  // if (!hasCachedDiagnosisForCurrentCode()) {
+  //   return false;
+  // }
+  if (!diagnosis || submittedCode.trim() !== cachedDiagnosisCode.trim()) {
+    return false;
+  }
+
+  switch (diagnosis.status) {
+    case "compile_error":
+      handleError(diagnosis.message);
+      return true;
+
+    case "notequiv":
+      await handleNotEquivalent(diagnosis);
+      return true;
+
+    case "correct":
+      await handleCorrect();
+      return true;
+
+    default:
+      return false;
+  }
 }
 
 function showSpinner() {
