@@ -197,6 +197,7 @@ async function handleRun() {
   }
 
   if (response.status === "notequiv") {
+    // previousCode = submittedCode;
     return handleNotEquivalent(response);
   }
 
@@ -233,6 +234,7 @@ async function handleCorrect() {
   // Handle feedback as soon as it's ready
   const feedback = await feedbackPromise;
   previousFunctionalCode = submittedCode;
+  // previousCode = submittedCode;
 
   if (feedback?.present_refactorings === false) {
     showMsg(
@@ -433,7 +435,8 @@ async function generateHints() {
 
     currentHints = Array.isArray(data?.suggestions) ? data.suggestions : [];
     currentHintTree = data?.hint_tree || null;
-    lastHintedCode = currentEditorCode;
+    // lastHintedCode = currentEditorCode;
+    lastHintedCode = submittedCode;
 
     if (!data.hint_tree) {
       const fallbackHint = Array.isArray(data.suggestions)
@@ -456,8 +459,11 @@ async function generateHints() {
 
 async function handleHints() {
   clearMessages();
-  document.getElementById("hints").innerHTML = "";
   submittedCode = editor.getValue();
+
+  console.log("[handleHints] Invoked");
+  console.log("[handleHints] submittedCode:", submittedCode);
+  console.log("[handleHints] lastHintedCode:", lastHintedCode);
 
   // const currentGroup = window.currentUser?.group;
   // if (currentGroup === "STEP-BASED") {
@@ -479,12 +485,19 @@ async function handleHints() {
     return;
   }
 
+  console.log("[handleHints] currentHintTree exists:", !!currentHintTree);
+  console.log("[handleHints] Code matches lastHintedCode:", submittedCode.trim() === lastHintedCode.trim());
+
   // Only reuse a cached hint tree when it was generated from the exact current code snapshot.
   if (currentHintTree && submittedCode.trim() === lastHintedCode.trim()) {
     console.log("[handleHints] Reusing existing hint tree for the current code snapshot.");
+    lastHintedCode = submittedCode;
     renderHintTree(currentHintTree);
     return;
   }
+
+  clearHints();
+  document.getElementById("hints").innerHTML = "";
 
   // Otherwise, generate new hints
   console.log("[handleHints] No valid hint tree or code changed. Generating new hints...");
@@ -603,6 +616,8 @@ async function handleNotEquivalent(data) {
   //   msgtype.HINT,
   //   generateHints()
   // );
+
+  // previousCode = submittedCode;
 }
 
 
@@ -745,6 +760,17 @@ function renderHintTree(tree) {
       } else if (step === 2 && refactoredCode) {
         codeBlock.style.display = "block";
         expandBtn.remove();
+
+        if (reason) {
+          const reasonBtn = document.createElement("md-outlined-button");
+          reasonBtn.textContent = "Get Reason";
+          reasonBtn.onclick = () => {
+            reasonEl.style.display = "block";
+            reasonBtn.remove();
+          };
+          card.appendChild(reasonBtn);
+        }
+
       } else if (step === 3 && reason) {
         reasonEl.style.display = "block";
         expandBtn.remove();
@@ -754,14 +780,14 @@ function renderHintTree(tree) {
     };
     card.appendChild(expandBtn);
 
-    // Reason button
-    const reasonBtn = document.createElement("md-outlined-button");
-    reasonBtn.textContent = "Get Reason";
-    reasonBtn.onclick = () => {
-      reasonEl.style.display = "block";
-      reasonBtn.remove();
-    };
-    card.appendChild(reasonBtn);
+    // // Reason button
+    // const reasonBtn = document.createElement("md-outlined-button");
+    // reasonBtn.textContent = "Get Reason";
+    // reasonBtn.onclick = () => {
+    //   reasonEl.style.display = "block";
+    //   reasonBtn.remove();
+    // };
+    // card.appendChild(reasonBtn);
 
     container.appendChild(card);
   });

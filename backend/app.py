@@ -77,6 +77,7 @@ async def lifespan(app: FastAPI):
     # Initialize state
     app.state.active_user_sessions = {}
     app.state.user_lock = RLock()
+    # app.state.user_request_counts = {}
     init_db()
     yield
 
@@ -199,7 +200,6 @@ async def run_code(data: CodeRequest):
 
 @app.post("/diagnose")
 async def diagnose(data: DiagnoseRequest):
-    username = data.username or "anonymous"
     # _enforce_rate_limit(username)
 
     ex = EXERCISES.get(data.exercise_id)
@@ -307,6 +307,12 @@ async def get_hint_tree(data: HintRequest):
     username = data.username or "anonymous"
     # _enforce_rate_limit(username)
 
+    # if not _check_and_increment_request_count(username):
+    #     raise HTTPException(
+    #         status_code=429,
+    #         detail="You have exceeded the maximum number of requests (100)."
+    #     )
+
     ex = EXERCISES.get(data.exercise_id)
     hint_group = data.hint_group
     diagnosis_status = data.code_diagnosis
@@ -359,6 +365,14 @@ async def log_action(data: ActionLogRequest):
 
 @app.post("/correct_feedback")
 async def get_correct_feedback(data: DiagnoseRequest):
+    username = data.username or "anonymous"
+
+    # if not _check_and_increment_request_count(username):
+    #     raise HTTPException(
+    #         status_code=429,
+    #         detail="You have exceeded the maximum number of requests (100)."
+    #     )
+    
     ex = EXERCISES.get(data.exercise_id)
     if not ex:
         raise HTTPException(status_code=404, detail="Exercise not found")
@@ -381,6 +395,14 @@ async def get_correct_feedback(data: DiagnoseRequest):
 
 @app.post("/notequiv_feedback")
 async def get_notequiv_feedback(data: DiagnoseRequest):
+    username = data.username or "anonymous"
+
+    # if not _check_and_increment_request_count(username):
+    #     raise HTTPException(
+    #         status_code=429,
+    #         detail="You have exceeded the maximum number of requests (100)."
+    #     )
+    
     ex = EXERCISES.get(data.exercise_id)
     if not ex:
         raise HTTPException(status_code=404, detail="Exercise not found")
@@ -409,6 +431,16 @@ async def get_notequiv_feedback(data: DiagnoseRequest):
         return {"error": str(e)}
 
 # === Internal Helpers ===
+
+# def _check_and_increment_request_count(username: str) -> bool:
+#     with app.state.user_lock:
+#         # Initialize count for new users
+#         if username not in app.state.user_request_counts:
+#             app.state.user_request_counts[username] = 0
+
+#         count = app.state.user_request_counts[username]
+#         print(f"User {username} request count: {count}")  # Debug
+#         return count <= 10
 
 def build_java_program(user_code: str, test_code: str) -> str:
     return f"""
