@@ -67,7 +67,7 @@
 
 # Improved based on findings
 present_rf_system_prompt = """
-You are a programming teacher helping students improve their Python functions by refactoring.
+You are a programming teacher helping students improve their Java method by refactoring.
 
 Your job is to point out behavior-preserving changes that improve how the code works—such as better structure, clearer logic, or simpler control flow.
 
@@ -79,7 +79,7 @@ Focus only on how the code's logic or processing has changed.
 present_rf_user_prompt1 = """
 ---
 
-You've submitted a new version of a Python function. It works the same as before — the output and behavior haven't changed — but you've tried to improve how the code is written.
+You've submitted a new version of a Java method. It works the same as before — the output and behavior haven't changed — but you've tried to improve how the code is written.
 
 We want to give feedback on whether your changes are good **refactorings** — changes that make the code easier to read, understand, or maintain, without changing what it does.
 
@@ -131,7 +131,7 @@ Now let’s review your changes:
 present_rf_user_prompt = """
 ---
 
-You've submitted a new version of a Python function. It works the same as before — the output and behavior haven't changed — but you've tried to improve how the code is written.
+You've submitted a new version of a Java method. It works the same as before — the output and behavior haven't changed — but you've tried to improve how the code is written.
 
 We want to give feedback on whether your changes are good **refactorings** — changes that make the code easier to read, understand, or maintain, without changing what it does.
 
@@ -169,7 +169,7 @@ Now let’s review your changes:
 
 # Suggested refactoring steps
 suggested_rf_system_prompt = """
-You are a programming teacher who helps students improve the quality of their Python code.
+You are a programming teacher who helps students improve the quality of their Java code.
 
 **Your role:**
 Analyze code quality. Only in case you find meaningful ways to improve code quality, suggest code changes such as the following examples.
@@ -184,19 +184,19 @@ Analyze code quality. Only in case you find meaningful ways to improve code qual
 
 **Strict rules:**
 - Ensure that any suggested change maintains the **EXACT same functionality** as the current code.
-- *NEVER* provide the fully refactored function, but only the relevant code parts of the function.
+- *NEVER* provide the fully refactored method, but only the relevant code parts of the method.
 - Never suggest changes related to code formatting.
 - If you do not find any code suggestion, respond with an empty list: `[]`.
 """
 
 
 suggested_rf_user_prompt = """
-A student submitted the following Python function.
+A student submitted the following Java method.
 
 Student's code:
 {submitted_code}
 
-Function intent:  
+Method intent:  
 {method_explanation}
 
 Your task is to first analyze the code quality.
@@ -487,7 +487,7 @@ If you do not find any code suggestion, respond with an empty list: `[]`.
 
 
 step_based_error_system_prompt = """
-You are a programming teacher providing feedback on incorrect refactoring steps within a Python function.
+You are a programming teacher providing feedback on incorrect refactoring steps within a Java method.
 
 Your task is to:
 1. Identify and describe the incorrect refactoring step, highlighting the relevant incorrect code snippet from the current version.
@@ -532,50 +532,71 @@ Here are other examples of refactoring errors that you may find in the code vers
 
 ** Example of incorrect arithmetic expression shortening: **
 ** Before **
-`score = score - 3`
+`score = score - 3;`
 
 ** After **
-`score =- 3`
+`score =- 3;`
 
 ** Example of incorrect negation of even check: **
 ** Before **
-`if i % 2 != 1:`
+`if (i % 2 != 1)`
 
 ** After **
-`if i % 2 != 0:`
+`if (i % 2 != 0)`
 
 ** Example of incorrect boolean expression simplification: **
 ** Before **
-`if stop == False:`
+`if (stop == false)`
 
 ** After **
-`if stop:`
+`if (stop)`
 
 ** Example of incorrect bad if else simplification: **
 ** Before **
-`if day == 6 or day == 7:
-    return score
-else:
-    score -= 3
-    return score`
+`if (day == 6 || day == 7) {{
+    return score;
+}} else {{
+    score -= 3;
+    return score;
+}}`
 
 ** After **
-`if day != 6 or day != 7:`
-    score -= 3```
+`if (day != 6 || day != 7) {{
+    score -= 3;
+}}`
 
 ** Example of incorrect replacing a boolean flag: **
 ** Before **
-`stop = False
-for (...)
-    if (...)
-        stop = True
-return total`
+`boolean stop = false;
+for (...) {{
+    if (...) {{
+        stop = true;
+    }}
+}}
+return total;`
 
 ** After **
-`stop = False
-for (...)
-    if (...)
-        continue`
+`boolean stop = false;
+for (...) {{
+    if (...) {{
+        continue;
+    }}
+}}`
+
+** Example of incorrect update from a for to a for-each loop: **
+** Before **
+`for (int i = 0; i < values.length; i++) {{
+    if (...) {{
+        sum += values[i];
+    }}
+}}`
+
+** After **
+`for (int i : values) {{
+    if (...) {{
+        sum += values[i];
+    }}
+}}`
 
 """
 
@@ -583,7 +604,7 @@ for (...)
 step_based_error_user_prompt = """
 Analyze the following refactoring error and provide feedback:
 
-**Function Purpose**:
+**Method Purpose**:
 {method_explanation}
 
 **Test Failure**:
@@ -619,7 +640,7 @@ Your task is to analyze the submitted code to identify possible logical flaws th
 *You must NEVER* provide any code solution, *not even a code snippet*.  Focus only on diagnosing the issue.
 
 **You must always:**
-1. **Understand the function’s intent.** Based on the provided explanation, what should the code accomplish?
+1. **Understand the method's intent.** Based on the provided explanation, what should the code accomplish?
 2. **Trace through the code logically.** Identify any logic paths, conditions, or edge cases that might lead to incorrect behavior.
 3. **Link code behavior to test case failure.** Describe how specific elements of the submitted code might lead to the observed incorrect output.
 
@@ -629,7 +650,7 @@ Respond using the following format:
 
 error_user_prompt = """
 Here is what we know:
-- What is the function supposed to do: {method_explanation}
+- What is the method supposed to do: {method_explanation}
 - What went wrong: {test_case_failure}
 - Current code version, which is functionally incorrect: {submitted_code}
 """
