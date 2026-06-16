@@ -442,8 +442,8 @@ async function generateHints() {
     await logUserAction("GetHint", {
       previous_code: previousCode,
       code_status: freshDiagnosis?.status || "correct",
-      feedback: null,
       hint_tree: data?.hint_tree ? JSON.stringify(data.hint_tree) : null,
+      feedback: null,
     });
 
     currentHints = Array.isArray(data?.suggestions) ? data.suggestions : [];
@@ -773,10 +773,17 @@ function renderHintTree(tree) {
     // Expand button
     const expandBtn = document.createElement("md-text-button");
     expandBtn.innerHTML = `Explain more <svg slot="icon" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M450-200v-250H200v-60h250v-250h60v250h250v60H510v250h-60Z"/></svg>`;
-    expandBtn.onclick = () => {
+    expandBtn.onclick = async () => {
       step++;
       if (step === 1 && targetedHint) {
         targetedEl.style.display = "block";
+
+        await logUserAction("ExpandHint", {
+          code_status: diagnosis?.status || null,
+          hint_tree: currentHintTree ? JSON.stringify(currentHintTree) : null,
+          feedback: targetedHint
+        });
+
         expandBtn.innerText = "Get Code";
       // } else if (step === 2 && concreteHint) {
       //   concreteEl.style.display = "block";
@@ -786,6 +793,13 @@ function renderHintTree(tree) {
       //   expandBtn.remove();
       } else if (step === 2 && refactoredCode) {
         codeBlock.style.display = "block";
+
+        await logUserAction("GetCode", {
+          code_status: diagnosis?.status || null,
+          hint_tree: currentHintTree ? JSON.stringify(currentHintTree) : null,
+          feedback: refactoredCode
+        });
+
         expandBtn.remove();
 
         if (reason) {
@@ -824,16 +838,43 @@ function renderHintTree(tree) {
   newHintBtn.id = "newhint";
   newHintBtn.innerHTML = `New Hint <svg slot="icon" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M450-200v-250H200v-60h250v-250h60v250h250v60H510v250h-60Z"/></svg>`;
   newHintBtn.style.display = "inline-block";
-  newHintBtn.onclick = () => {
+  newHintBtn.onclick = async () => {
     const next = document.querySelector(".hint-block:not(.shown)");
     if (next) {
       next.classList.add("shown");
       next.style.display = "block";
+
+      // await logUserAction("DisplayHint", {
+      //   code_status: diagnosis?.status || null,
+      //   hint_tree: JSON.stringify(node),
+      //   feedback: generalHint
+      // });
     }
     if (!document.querySelector(".hint-block:not(.shown)")) {
       newHintBtn.style.display = "none";
     }
   };
+  // newHintBtn.onclick = async () => {
+  //   const next = document.querySelector(".hint-block:not(.shown)");
+
+  //   if (next) {
+  //     next.classList.add("shown");
+  //     next.style.display = "block";
+
+  //     const index = Number(next.dataset.hintIndex);
+  //     const node = children[index];
+
+  //     await logUserAction("DisplayHint", {
+  //       code_status: diagnosis?.status || null,
+  //       hint_tree: JSON.stringify(node),
+  //       feedback: generalHint
+  //     });
+  //   }
+
+  //   if (!document.querySelector(".hint-block:not(.shown)")) {
+  //     newHintBtn.style.display = "none";
+  //   }
+  // };
   container.appendChild(newHintBtn);
 
   // Show only the first card
@@ -842,6 +883,7 @@ function renderHintTree(tree) {
     c.style.display = i === 0 ? "block" : "none";
     if (i === 0) c.classList.add("shown");
   });
+  
 }
 
 
