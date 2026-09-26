@@ -5,3 +5,4 @@ requests
 instructor
 mistralai
 python-dotenv
+pymysql
