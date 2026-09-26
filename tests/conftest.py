@@ -15,6 +15,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend import app as api
+from backend.routers import actions, auth
+from backend.services import judge0
 
 
 def _unexpected_external_call(*args, **kwargs):
@@ -23,14 +25,15 @@ def _unexpected_external_call(*args, **kwargs):
 
 @pytest.fixture
 def client(monkeypatch):
-    monkeypatch.setattr(api, "init_db", lambda: None)
-    monkeypatch.setattr(api, "authenticate_user", _unexpected_external_call)
-    monkeypatch.setattr(api, "log_action_entry", _unexpected_external_call)
-    monkeypatch.setattr(api.requests, "post", _unexpected_external_call)
+    monkeypatch.setattr(api, "init_db", lambda config: None)
     monkeypatch.setattr(
-        api.app.state,
-        "client_wrapper",
-        SimpleNamespace(call=_unexpected_external_call),
+        api,
+        "get_client_wrapper",
+        lambda config: SimpleNamespace(call=_unexpected_external_call),
     )
-    with TestClient(api.app) as test_client:
+    monkeypatch.setattr(auth, "authenticate_user", _unexpected_external_call)
+    monkeypatch.setattr(actions, "log_action_entry", _unexpected_external_call)
+    monkeypatch.setattr(judge0.requests, "post", _unexpected_external_call)
+    test_app = api.create_app()
+    with TestClient(test_app) as test_client:
         yield test_client

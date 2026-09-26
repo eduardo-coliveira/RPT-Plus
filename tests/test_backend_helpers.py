@@ -1,4 +1,5 @@
-from backend.app import build_hint_tree, build_java_program, generate_test_code, parse_test_output
+from backend.services.feedback import build_hint_tree
+from backend.services.diagnosis import build_java_program, generate_test_code, parse_test_output
 
 
 def test_build_java_program_wraps_submission_and_tests():

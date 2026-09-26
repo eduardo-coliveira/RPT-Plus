@@ -6,3 +6,4 @@ instructor
 mistralai
 python-dotenv
 pymysql
+alembic

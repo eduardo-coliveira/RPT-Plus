@@ -2,9 +2,19 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+from fastapi.testclient import TestClient
 
 from backend import app as api
+from backend.routers import actions, auth, exercises
+from backend.services import diagnosis, judge0
 from backend.schemas import SuggestedRefactoringWithHints
+
+
+def test_exercise_loader_works_from_a_different_working_directory(monkeypatch, tmp_path):
+    expected_exercises = exercises.load_exercises()
+    monkeypatch.chdir(tmp_path)
+
+    assert exercises.load_exercises() == expected_exercises
 
 
 def _stub_judge0(monkeypatch, result=None, error=None):
@@ -12,7 +22,7 @@ def _stub_judge0(monkeypatch, result=None, error=None):
     judge0_response.raise_for_status.return_value = None
     judge0_response.json.return_value = result
     judge0_post = Mock(side_effect=error) if error is not None else Mock(return_value=judge0_response)
-    monkeypatch.setattr(api.requests, "post", judge0_post)
+    monkeypatch.setattr(judge0.requests, "post", judge0_post)
     return judge0_post
 
 
@@ -22,17 +32,24 @@ def test_list_exercises_returns_ids_and_descriptions(client):
     assert response.status_code == 200
     assert response.json() == [
         {"id": exercise["id"], "description": exercise["description"]}
-        for exercise in api.EXERCISES.values()
+        for exercise in client.app.state.exercises.values()
     ]
 
 
+def test_python_exercise_alias_returns_same_summaries(client):
+    response = client.get("/exercises_python")
+
+    assert response.status_code == 200
+    assert response.json() == client.get("/exercises").json()
+
+
 def test_get_exercise_returns_known_exercise(client):
-    exercise_id = next(iter(api.EXERCISES))
+    exercise_id = next(iter(client.app.state.exercises))
 
     response = client.get(f"/exercise/{exercise_id}")
 
     assert response.status_code == 200
-    assert response.json() == api.EXERCISES[exercise_id]
+    assert response.json() == client.app.state.exercises[exercise_id]
 
 
 def test_get_exercise_returns_404_for_unknown_id(client):
@@ -42,8 +59,24 @@ def test_get_exercise_returns_404_for_unknown_id(client):
     assert response.json() == {"detail": "Exercise not found"}
 
 
+@pytest.mark.parametrize(
+    ("path", "payload"),
+    [
+        ("/diagnose", {"submitted_code": "code"}),
+        ("/hint_tree", {"submitted_code": "code", "hint_group": "group-a"}),
+        ("/correct_feedback", {"submitted_code": "code"}),
+        ("/notequiv_feedback", {"submitted_code": "code"}),
+    ],
+)
+def test_exercise_routes_return_same_404_for_unknown_id(client, path, payload):
+    response = client.post(path, json={"exercise_id": "missing-exercise", **payload})
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Exercise not found"}
+
+
 def test_login_rejects_invalid_credentials(client, monkeypatch):
-    monkeypatch.setattr(api, "authenticate_user", lambda username, password: None)
+    monkeypatch.setattr(auth, "authenticate_user", lambda username, password, config: None)
 
     response = client.post("/login", json={"username": "learner", "password": "wrong"})
 
@@ -53,9 +86,9 @@ def test_login_rejects_invalid_credentials(client, monkeypatch):
 
 def test_login_claims_session_and_rejects_duplicate_login(client, monkeypatch):
     monkeypatch.setattr(
-        api,
+        auth,
         "authenticate_user",
-        lambda username, password: {"username": username, "group_name": "group-a"},
+        lambda username, password, config: {"username": username, "group_name": "group-a"},
     )
 
     payload = {"username": "learner", "password": "correct"}
@@ -68,19 +101,37 @@ def test_login_claims_session_and_rejects_duplicate_login(client, monkeypatch):
     assert duplicate_response.json() == {"detail": "This user is already logged in elsewhere."}
 
 
+def test_login_sessions_are_isolated_between_app_instances(client, monkeypatch):
+    monkeypatch.setattr(
+        auth,
+        "authenticate_user",
+        lambda username, password, config: {"username": username, "group_name": "group-a"},
+    )
+    second_app = api.create_app()
+
+    with TestClient(second_app) as second_client:
+        first_response = client.post("/login", json={"username": "learner", "password": "correct"})
+        second_response = second_client.post("/login", json={"username": "learner", "password": "correct"})
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert client.app.state.active_user_sessions == {"learner": next(iter(client.app.state.active_user_sessions.values()))}
+    assert second_app.state.active_user_sessions == {"learner": next(iter(second_app.state.active_user_sessions.values()))}
+
+
 def test_logout_removes_active_session(client):
-    api.app.state.active_user_sessions["learner"] = 1.0
+    client.app.state.active_user_sessions["learner"] = 1.0
 
     response = client.post("/logout", json={"username": "learner"})
 
     assert response.status_code == 200
     assert response.json() == {"message": "User learner logged out"}
-    assert "learner" not in api.app.state.active_user_sessions
+    assert "learner" not in client.app.state.active_user_sessions
 
 
 def test_log_action_returns_ok_when_database_write_succeeds(client, monkeypatch):
     log_entry = Mock(return_value=True)
-    monkeypatch.setattr(api, "log_action_entry", log_entry)
+    monkeypatch.setattr(actions, "log_action_entry", log_entry)
     payload = {
         "username": "learner",
         "exercise": "0.isOvenReady",
@@ -96,11 +147,11 @@ def test_log_action_returns_ok_when_database_write_succeeds(client, monkeypatch)
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
-    log_entry.assert_called_once_with(**payload)
+    log_entry.assert_called_once_with(**payload, config=client.app.state.database_config)
 
 
 def test_log_action_returns_500_when_database_write_fails(client, monkeypatch):
-    monkeypatch.setattr(api, "log_action_entry", Mock(return_value=False))
+    monkeypatch.setattr(actions, "log_action_entry", Mock(return_value=False))
 
     response = client.post(
         "/log_action",
@@ -125,7 +176,7 @@ def test_run_code_translates_mocked_judge0_response(client, monkeypatch):
         "compile_output": "compiler output",
     }
     judge0_post = Mock(return_value=judge0_response)
-    monkeypatch.setattr(api.requests, "post", judge0_post)
+    monkeypatch.setattr(judge0.requests, "post", judge0_post)
 
     response = client.post("/run_code", json={"code": "public class Main {}"})
 
@@ -141,7 +192,7 @@ def test_run_code_translates_mocked_judge0_response(client, monkeypatch):
         },
     }
     judge0_post.assert_called_once_with(
-        f"{api.JUDGE0_URL}?wait=true",
+        f"{judge0.JUDGE0_URL}?wait=true",
         json={
             "language_id": 62,
             "source_code": "public class Main {}",
@@ -158,8 +209,8 @@ def test_correct_feedback_uses_stubbed_llm(client, monkeypatch):
         steps=[],
         general_feedback="No structural changes were found.",
     )
-    monkeypatch.setattr(api.app.state, "client_wrapper", llm)
-    exercise_id = next(iter(api.EXERCISES))
+    monkeypatch.setattr(client.app.state, "client_wrapper", llm)
+    exercise_id = next(iter(client.app.state.exercises))
 
     response = client.post(
         "/correct_feedback",
@@ -177,7 +228,7 @@ def test_correct_feedback_uses_stubbed_llm(client, monkeypatch):
     assert llm.call.call_args.args[1] == {
         "submitted_code": "public static void run() {}",
         "previous_code": "",
-        "method_explanation": api.EXERCISES[exercise_id]["description"],
+        "method_explanation": client.app.state.exercises[exercise_id]["description"],
     }
 
 
@@ -224,7 +275,7 @@ def test_diagnose_reports_the_first_failing_test(client, monkeypatch):
 
 
 def test_diagnose_accepts_all_matching_test_results_and_sends_generated_program(client, monkeypatch):
-    exercise = api.EXERCISES["0.isOvenReady"]
+    exercise = client.app.state.exercises["0.isOvenReady"]
     submitted_code = "public static boolean isOvenReady(int temperature) { return true; }"
     stdout = "\n".join(
         f"TEST_RESULT:{index}|expected={test['expected']}|actual={test['expected']}"
@@ -242,12 +293,12 @@ def test_diagnose_accepts_all_matching_test_results_and_sends_generated_program(
 
     assert response.json() == {"status": "correct"}
     judge0_post.assert_called_once_with(
-        f"{api.JUDGE0_URL}?wait=true",
+        f"{judge0.JUDGE0_URL}?wait=true",
         json={
             "language_id": 62,
-            "source_code": api.build_java_program(
+            "source_code": diagnosis.build_java_program(
                 submitted_code,
-                api.generate_test_code(exercise["call_method"], exercise["result_type"], exercise["tests"]),
+                diagnosis.generate_test_code(exercise["call_method"], exercise["result_type"], exercise["tests"]),
             ),
             "stdin": "",
             "expected_output": None,
@@ -303,7 +354,7 @@ def test_hint_tree_passes_prompt_fields_to_llm_and_returns_tree(client, monkeypa
     )
     llm = Mock()
     llm.call.return_value = SimpleNamespace(suggestions=[suggestion])
-    monkeypatch.setattr(api.app.state, "client_wrapper", llm)
+    monkeypatch.setattr(client.app.state, "client_wrapper", llm)
 
     response = client.post(
         "/hint_tree",
@@ -329,7 +380,7 @@ def test_hint_tree_passes_prompt_fields_to_llm_and_returns_tree(client, monkeypa
         {
             "submitted_code": "public static boolean isOvenReady(int temperature) {}",
             "previous_code": "previous version",
-            "method_explanation": api.EXERCISES[exercise_id]["description"],
+            "method_explanation": client.app.state.exercises[exercise_id]["description"],
             "hint_group": "group-a",
         },
     )
@@ -347,7 +398,7 @@ def test_notequiv_feedback_selects_llm_prompt_and_failure_text(
 ):
     llm = Mock()
     llm.call.return_value = SimpleNamespace(error_summary="The change alters behavior.")
-    monkeypatch.setattr(api.app.state, "client_wrapper", llm)
+    monkeypatch.setattr(client.app.state, "client_wrapper", llm)
     payload = {
         "exercise_id": "0.isOvenReady",
         "submitted_code": "public static boolean isOvenReady(int temperature) {}",
@@ -367,7 +418,7 @@ def test_notequiv_feedback_selects_llm_prompt_and_failure_text(
             "previous_code": "previous version",
             "submitted_code": "public static boolean isOvenReady(int temperature) {}",
             "test_case_failure": test_case_failure,
-            "method_explanation": api.EXERCISES["0.isOvenReady"]["description"],
+            "method_explanation": client.app.state.exercises["0.isOvenReady"]["description"],
         },
     )
 
@@ -375,7 +426,7 @@ def test_notequiv_feedback_selects_llm_prompt_and_failure_text(
 def test_hint_tree_returns_server_error_when_llm_fails(client, monkeypatch):
     llm = Mock()
     llm.call.side_effect = RuntimeError("LLM unavailable")
-    monkeypatch.setattr(api.app.state, "client_wrapper", llm)
+    monkeypatch.setattr(client.app.state, "client_wrapper", llm)
 
     response = client.post(
         "/hint_tree",

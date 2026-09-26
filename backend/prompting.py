@@ -1,6 +1,6 @@
+from dataclasses import dataclass, field
 from typing import Type, get_args, get_origin
 from pydantic import BaseModel
-# from openai import OpenAI
 # Monkey patch mistralai to provide top-level Mistral import for instructor compatibility
 import mistralai
 from mistralai.client import Mistral as RealMistral
@@ -9,51 +9,90 @@ from mistralai import Mistral
 
 import instructor
 import os
-from backend.prompts import *
-from backend.schemas import *
+from backend.prompts import (
+    error_system_prompt,
+    error_user_prompt,
+    present_rf_system_prompt,
+    present_rf_user_prompt,
+    step_based_error_system_prompt,
+    step_based_error_user_prompt,
+    suggested_rf_system_prompt,
+    suggested_rf_user_prompt,
+)
+from backend.schemas import RefactoringSteps, SimpleError, SuggestedRefactoringsWithHints
+
+
+@dataclass(frozen=True)
+class PromptDefinition:
+    system_prompt: str
+    user_prompt_template: str
+    response_model: Type[BaseModel]
+
+
+@dataclass(frozen=True)
+class LLMConfig:
+    api_key: str = field(repr=False)
+    model: str
+    max_tokens: int = 1000
+
+    @classmethod
+    def from_env(cls) -> "LLMConfig":
+        api_key = os.environ.get("MISTRAL_API_KEY")
+        if not api_key:
+            raise ValueError("MISTRAL_API_KEY is required")
+
+        try:
+            max_tokens = int(os.getenv("LLM_MAX_TOKENS", "1000"))
+        except ValueError as error:
+            raise ValueError("LLM_MAX_TOKENS must be an integer") from error
+        if max_tokens <= 0:
+            raise ValueError("LLM_MAX_TOKENS must be positive")
+
+        return cls(
+            api_key=api_key,
+            model=os.getenv("MISTRAL_MODEL", "mistral-large-2512"),
+            max_tokens=max_tokens,
+        )
+
+
+PROMPT_DEFINITIONS = {
+    "ERROR": PromptDefinition(error_system_prompt, error_user_prompt, SimpleError),
+    "PRESENT": PromptDefinition(present_rf_system_prompt, present_rf_user_prompt, RefactoringSteps),
+    "SUGGESTED": PromptDefinition(
+        suggested_rf_system_prompt,
+        suggested_rf_user_prompt,
+        SuggestedRefactoringsWithHints,
+    ),
+    "STEP_ERROR": PromptDefinition(
+        step_based_error_system_prompt,
+        step_based_error_user_prompt,
+        SimpleError,
+    ),
+}
 
 class LLMClientWrapper:
-    def __init__(self, client, model):
+    def __init__(self, client, config: LLMConfig):
         self.client = client
-        self.model = model
-        self.system_prompts: dict = {
-            "ERROR": error_system_prompt,
-            "PRESENT": present_rf_system_prompt,
-            "SUGGESTED": suggested_rf_system_prompt,
-            # "STEP_BASED_SUGGESTED": step_based_system_prompt,
-            "STEP_ERROR": step_based_error_system_prompt
-        }
-        self.user_prompt_templates: dict = {
-            "ERROR": error_user_prompt,
-            "PRESENT": present_rf_user_prompt,
-            "SUGGESTED": suggested_rf_user_prompt,
-            # "STEP_BASED_SUGGESTED": step_based_user_prompt,
-            "STEP_ERROR": step_based_error_user_prompt
-        }
-        self.response_models: dict = {
-            "ERROR": SimpleError,
-            "PRESENT": RefactoringSteps,
-            "SUGGESTED": SuggestedRefactoringsWithHints,
-            # "STEP_BASED_SUGGESTED": SuggestedRefactoringsStepBased,
-            "STEP_ERROR": SimpleError
-        }
+        self.config = config
+        self.prompt_definitions = PROMPT_DEFINITIONS
 
     def call(self, prompt_type: str, prompt_data: dict, temperature: float = 0.0, max_tokens: int | None = None, **kwargs) -> BaseModel:
-        # Prepare call arguments
-        response_model = self.response_models.get(prompt_type)
-        if not response_model:
+        definition = self.prompt_definitions.get(prompt_type)
+        if definition is None:
             raise ValueError(f"Unknown prompt_type: {prompt_type}")
-        prompt_data["fields"] = describe_model_fields(response_model)
 
-        token_budget = max_tokens if max_tokens is not None else int(os.getenv("LLM_MAX_TOKENS", "1000"))
+        render_data = dict(prompt_data)
+        render_data["fields"] = describe_model_fields(definition.response_model)
+
+        token_budget = max_tokens if max_tokens is not None else self.config.max_tokens
 
         call_args = {
-            "model": self.model,
+            "model": self.config.model,
             "messages": [
-                {"role": "system", "content": self.system_prompts.get(prompt_type)},
-                {"role": "user", "content": self.user_prompt_templates.get(prompt_type).format(**prompt_data)},
+                {"role": "system", "content": definition.system_prompt},
+                {"role": "user", "content": definition.user_prompt_template.format(**render_data)},
             ],
-            "response_model": response_model,
+            "response_model": definition.response_model,
             "temperature": temperature,
             "max_tokens": token_budget,
             **kwargs
@@ -63,13 +102,12 @@ class LLMClientWrapper:
         # print(response)
         return response
     
-def get_client_wrapper(model: str): 
-    # if local: 
-    #     client = instructor.from_openai(OpenAI(base_url='http://localhost:11434/v1',api_key='ollama' ),mode=instructor.Mode.JSON)
-    # else:
-        # client = instructor.from_openai(OpenAI(api_key=os.environ.get("OPENAI_API_KEY")), mode=instructor.Mode.JSON)
-    client = instructor.from_mistral(Mistral(api_key=os.environ.get("MISTRAL_API_KEY")), mode=instructor.Mode.MISTRAL_STRUCTURED_OUTPUTS)
-    return LLMClientWrapper(client, model)
+def get_client_wrapper(config: LLMConfig):
+    client = instructor.from_mistral(
+        Mistral(api_key=config.api_key),
+        mode=instructor.Mode.MISTRAL_STRUCTURED_OUTPUTS,
+    )
+    return LLMClientWrapper(client, config)
 
 
 def describe_model_fields(model: Type[BaseModel], indent: int = 0) -> str:
