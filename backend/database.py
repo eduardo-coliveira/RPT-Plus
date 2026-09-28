@@ -1,3 +1,5 @@
+"""Database settings, connections, and persistence helpers."""
+
 from dataclasses import dataclass, field
 import os
 import json
@@ -13,6 +15,8 @@ from sqlalchemy.engine import URL
 
 @dataclass(frozen=True)
 class DatabaseConfig:
+    """Database settings loaded from the environment."""
+
     host: str
     user: str
     password: str = field(repr=False)
@@ -20,6 +24,8 @@ class DatabaseConfig:
 
     @classmethod
     def from_env(cls) -> "DatabaseConfig":
+        """Build database settings from the environment."""
+
         values = {
             "DB_HOST": os.environ.get("DB_HOST"),
             "DB_USER": os.environ.get("DB_USER"),
@@ -37,7 +43,9 @@ class DatabaseConfig:
         )
 
 # --- Connection Management ---
-def get_db_connection(config: DatabaseConfig):
+def open_database_connection(config: DatabaseConfig):
+    """Open a MySQL connection using the supplied settings."""
+
     try:
         return pymysql.connect(
             host=config.host,
@@ -50,7 +58,9 @@ def get_db_connection(config: DatabaseConfig):
         print(f"Database connection failed: {e}")
         raise
 
-def run_migrations(config: DatabaseConfig) -> None:
+def apply_database_migrations(config: DatabaseConfig) -> None:
+    """Apply pending migrations to the database."""
+
     alembic_config = AlembicConfig(os.path.join(os.path.dirname(__file__), "alembic.ini"))
     database_url = URL.create(
         "mysql+pymysql",
@@ -63,7 +73,9 @@ def run_migrations(config: DatabaseConfig) -> None:
     command.upgrade(alembic_config, "head")
 
 
-def seed_default_users(cursor, default_users_json: str) -> None:
+def seed_users_if_empty(cursor, default_users_json: str) -> None:
+    """Add the configured default users when the table is empty."""
+
     cursor.execute("SELECT COUNT(*) FROM users")
     if cursor.fetchone()[0] != 0:
         return
@@ -80,29 +92,31 @@ def seed_default_users(cursor, default_users_json: str) -> None:
         print(f"Skipping default users (invalid DEFAULT_USERS): {error}")
 
 
-def init_db(config: DatabaseConfig, default_users_json: Optional[str] = None) -> None:
+def initialize_database(config: DatabaseConfig, default_users_json: Optional[str] = None) -> None:
+    """Migrate the database and add its default users."""
+
     if default_users_json is None:
         default_users_json = os.environ.get("DEFAULT_USERS", "[]")
 
-    run_migrations(config)
+    apply_database_migrations(config)
     try:
-        with get_db_connection(config) as conn:
+        with open_database_connection(config) as conn:
             with conn.cursor() as cursor:
-                seed_default_users(cursor, default_users_json)
+                seed_users_if_empty(cursor, default_users_json)
                 conn.commit()
     except pymysql.MySQLError as error:
         print(f"Failed to initialize database: {error}")
         raise
 
 
-def authenticate_user(
+def authenticate_user_credentials(
     username: str,
     password: str,
     config: DatabaseConfig,
 ) -> Optional[Dict[str, Any]]:
-    """Authenticate a user. Returns user dict or None."""
+    """Check credentials and return the matching user record."""
     try:
-        with get_db_connection(config) as conn:
+        with open_database_connection(config) as conn:
             with conn.cursor(pymysql.cursors.DictCursor) as cursor:
                 cursor.execute(
                     "SELECT id, username, group_name FROM users WHERE username = %s AND password = %s",
@@ -113,7 +127,7 @@ def authenticate_user(
         print(f"Authentication error: {e}")
         return None
 
-def log_action_entry(
+def record_action_log(
     username: str,
     exercise: str,
     current_code: str,
@@ -125,8 +139,10 @@ def log_action_entry(
     *,
     config: DatabaseConfig,
 ) -> bool:
+    """Save one user action and report whether the write succeeded."""
+
     try:
-        with get_db_connection(config) as conn:
+        with open_database_connection(config) as conn:
             with conn.cursor(pymysql.cursors.DictCursor) as cursor:
                 cursor.execute("SELECT id FROM users WHERE username = %s", (username,))
                 user = cursor.fetchone()
@@ -159,3 +175,12 @@ def log_action_entry(
     except pymysql.MySQLError as e:
         print(f"Failed to log action: {e}")
         return False
+
+
+# Compatibility aliases for scripts that are intentionally left unchanged.
+get_db_connection = open_database_connection
+run_migrations = apply_database_migrations
+seed_default_users = seed_users_if_empty
+init_db = initialize_database
+authenticate_user = authenticate_user_credentials
+log_action_entry = record_action_log

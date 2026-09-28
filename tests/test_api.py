@@ -11,10 +11,10 @@ from backend.schemas import SuggestedRefactoringWithHints
 
 
 def test_exercise_loader_works_from_a_different_working_directory(monkeypatch, tmp_path):
-    expected_exercises = exercises.load_exercises()
+    expected_exercises = exercises.load_exercise_catalog()
     monkeypatch.chdir(tmp_path)
 
-    assert exercises.load_exercises() == expected_exercises
+    assert exercises.load_exercise_catalog() == expected_exercises
 
 
 def _stub_judge0(monkeypatch, result=None, error=None):
@@ -76,7 +76,7 @@ def test_exercise_routes_return_same_404_for_unknown_id(client, path, payload):
 
 
 def test_login_rejects_invalid_credentials(client, monkeypatch):
-    monkeypatch.setattr(auth, "authenticate_user", lambda username, password, config: None)
+    monkeypatch.setattr(auth, "authenticate_user_credentials", lambda username, password, config: None)
 
     response = client.post("/login", json={"username": "learner", "password": "wrong"})
 
@@ -87,7 +87,7 @@ def test_login_rejects_invalid_credentials(client, monkeypatch):
 def test_login_claims_session_and_rejects_duplicate_login(client, monkeypatch):
     monkeypatch.setattr(
         auth,
-        "authenticate_user",
+        "authenticate_user_credentials",
         lambda username, password, config: {"username": username, "group_name": "group-a"},
     )
 
@@ -104,7 +104,7 @@ def test_login_claims_session_and_rejects_duplicate_login(client, monkeypatch):
 def test_login_sessions_are_isolated_between_app_instances(client, monkeypatch):
     monkeypatch.setattr(
         auth,
-        "authenticate_user",
+        "authenticate_user_credentials",
         lambda username, password, config: {"username": username, "group_name": "group-a"},
     )
     second_app = api.create_app()
@@ -131,7 +131,7 @@ def test_logout_removes_active_session(client):
 
 def test_log_action_returns_ok_when_database_write_succeeds(client, monkeypatch):
     log_entry = Mock(return_value=True)
-    monkeypatch.setattr(actions, "log_action_entry", log_entry)
+    monkeypatch.setattr(actions, "record_action_log", log_entry)
     payload = {
         "username": "learner",
         "exercise": "0.isOvenReady",
@@ -151,7 +151,7 @@ def test_log_action_returns_ok_when_database_write_succeeds(client, monkeypatch)
 
 
 def test_log_action_returns_500_when_database_write_fails(client, monkeypatch):
-    monkeypatch.setattr(actions, "log_action_entry", Mock(return_value=False))
+    monkeypatch.setattr(actions, "record_action_log", Mock(return_value=False))
 
     response = client.post(
         "/log_action",
@@ -204,7 +204,7 @@ def test_run_code_translates_mocked_judge0_response(client, monkeypatch):
 
 def test_correct_feedback_uses_stubbed_llm(client, monkeypatch):
     llm = Mock()
-    llm.call.return_value = SimpleNamespace(
+    llm.request_structured_response.return_value = SimpleNamespace(
         present_refactorings=False,
         steps=[],
         general_feedback="No structural changes were found.",
@@ -223,9 +223,9 @@ def test_correct_feedback_uses_stubbed_llm(client, monkeypatch):
         "refactor_steps": [],
         "general_feedback": "No structural changes were found.",
     }
-    llm.call.assert_called_once()
-    assert llm.call.call_args.args[0] == "PRESENT"
-    assert llm.call.call_args.args[1] == {
+    llm.request_structured_response.assert_called_once()
+    assert llm.request_structured_response.call_args.args[0] == "PRESENT"
+    assert llm.request_structured_response.call_args.args[1] == {
         "submitted_code": "public static void run() {}",
         "previous_code": "",
         "method_explanation": client.app.state.exercises[exercise_id]["description"],
@@ -296,9 +296,9 @@ def test_diagnose_accepts_all_matching_test_results_and_sends_generated_program(
         f"{judge0.JUDGE0_URL}?wait=true",
         json={
             "language_id": 62,
-            "source_code": diagnosis.build_java_program(
+            "source_code": diagnosis.build_java_execution_harness(
                 submitted_code,
-                diagnosis.generate_test_code(exercise["call_method"], exercise["result_type"], exercise["tests"]),
+                diagnosis.build_java_test_runner_code(exercise["call_method"], exercise["result_type"], exercise["tests"]),
             ),
             "stdin": "",
             "expected_output": None,
@@ -353,7 +353,7 @@ def test_hint_tree_passes_prompt_fields_to_llm_and_returns_tree(client, monkeypa
         targeted_hint="Can the condition be returned directly?",
     )
     llm = Mock()
-    llm.call.return_value = SimpleNamespace(suggestions=[suggestion])
+    llm.request_structured_response.return_value = SimpleNamespace(suggestions=[suggestion])
     monkeypatch.setattr(client.app.state, "client_wrapper", llm)
 
     response = client.post(
@@ -375,7 +375,7 @@ def test_hint_tree_passes_prompt_fields_to_llm_and_returns_tree(client, monkeypa
     assert hint_node[0] == "Look at how the bounds are expressed."
     assert hint_node[2][0]["Tree"][0] == "Can the condition be returned directly?"
     assert hint_node[5]["title"] == "Use a range check"
-    llm.call.assert_called_once_with(
+    llm.request_structured_response.assert_called_once_with(
         "SUGGESTED",
         {
             "submitted_code": "public static boolean isOvenReady(int temperature) {}",
@@ -397,7 +397,7 @@ def test_notequiv_feedback_selects_llm_prompt_and_failure_text(
     client, monkeypatch, hint_group, prompt_type, test_case_failure
 ):
     llm = Mock()
-    llm.call.return_value = SimpleNamespace(error_summary="The change alters behavior.")
+    llm.request_structured_response.return_value = SimpleNamespace(error_summary="The change alters behavior.")
     monkeypatch.setattr(client.app.state, "client_wrapper", llm)
     payload = {
         "exercise_id": "0.isOvenReady",
@@ -412,7 +412,7 @@ def test_notequiv_feedback_selects_llm_prompt_and_failure_text(
 
     assert response.status_code == 200
     assert response.json() == {"error_summary": "The change alters behavior."}
-    llm.call.assert_called_once_with(
+    llm.request_structured_response.assert_called_once_with(
         prompt_type,
         {
             "previous_code": "previous version",
@@ -425,7 +425,7 @@ def test_notequiv_feedback_selects_llm_prompt_and_failure_text(
 
 def test_hint_tree_returns_server_error_when_llm_fails(client, monkeypatch):
     llm = Mock()
-    llm.call.side_effect = RuntimeError("LLM unavailable")
+    llm.request_structured_response.side_effect = RuntimeError("LLM unavailable")
     monkeypatch.setattr(client.app.state, "client_wrapper", llm)
 
     response = client.post(

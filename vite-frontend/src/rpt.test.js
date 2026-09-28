@@ -37,7 +37,7 @@ const hintTree = {
 };
 
 describe('exercise and hint workflows', () => {
-  let initApp;
+  let initializeRefactoringTutor;
 
   beforeEach(async () => {
     vi.resetModules();
@@ -65,7 +65,7 @@ describe('exercise and hint workflows', () => {
     });
     window.currentUser = { username: 'learner', group: 'group-a' };
 
-    ({ initApp } = await import('./rpt.js'));
+    ({ initializeRefactoringTutor } = await import('./rpt.js'));
   });
 
   afterEach(() => {
@@ -76,6 +76,7 @@ describe('exercise and hint workflows', () => {
   });
 
   function mockBackend({
+    exerciseData = exercises,
     diagnosis = { status: 'correct' },
     diagnoses,
     diagnosisFailures = [],
@@ -94,10 +95,10 @@ describe('exercise and hint workflows', () => {
     const fetchMock = vi.fn(async (url, options = {}) => {
       requests.push({ url, options });
       if (url === '/exercises') {
-        return { json: async () => exercises.map(({ id, description }) => ({ id, description })) };
+        return { json: async () => exerciseData.map(({ id, description }) => ({ id, description })) };
       }
       if (url.startsWith('/exercise/')) {
-        const exercise = exercises.find(({ id }) => id === url.slice('/exercise/'.length));
+        const exercise = exerciseData.find(({ id }) => id === url.slice('/exercise/'.length));
         return { json: async () => exercise };
       }
       if (url === '/diagnose') {
@@ -123,7 +124,7 @@ describe('exercise and hint workflows', () => {
   it('loads the selected exercise into the editor and diagnoses it', async () => {
     const { requests } = mockBackend();
 
-    await initApp();
+    await initializeRefactoringTutor();
 
     expect(document.getElementById('exname').textContent).toBe('Exercise 0.isOvenReady');
     expect(document.getElementById('exdesc').textContent).toBe(exercises[0].description);
@@ -141,12 +142,83 @@ describe('exercise and hint workflows', () => {
     expect(editor.getValue()).toBe(exercises[1].start_method);
     expect(requests.some(({ url }) => url === `/exercise/${exercises[1].id}`)).toBe(true);
     expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(2);
+
+    await vi.waitFor(() => {
+      expect(requests.some(({ url, options }) => {
+        if (url !== '/log_action') return false;
+        const payload = JSON.parse(options.body);
+        return payload.action === 'NewExercise' &&
+          payload.exercise === exercises[1].id &&
+          payload.current_code === exercises[1].start_method;
+      })).toBe(true);
+    });
+
+    const newExerciseLog = requests
+      .filter(({ url }) => url === '/log_action')
+      .map(({ options }) => JSON.parse(options.body))
+      .find(({ action }) => action === 'NewExercise');
+    expect(newExerciseLog.previous_code).toBe(exercises[1].start_method);
+  });
+
+  it('restarts the current exercise, resets the editor and diagnosis cache, and logs the restart', async () => {
+    const editedCode = 'public static boolean isOvenReady(int temperature) { return false; }';
+    const { requests } = mockBackend();
+
+    await initializeRefactoringTutor();
+    editor.setValue(editedCode);
+    document.getElementById('runBtn').click();
+    await vi.waitFor(() => expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(2));
+
+    document.getElementById('loadex').click();
+    await vi.waitFor(() => {
+      expect(editor.getValue()).toBe(exercises[0].start_method);
+      expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(3);
+      expect(requests.some(({ url, options }) => {
+        if (url !== '/log_action') return false;
+        const payload = JSON.parse(options.body);
+        return payload.action === 'RestartExercise' &&
+          payload.current_code === exercises[0].start_method;
+      })).toBe(true);
+    });
+
+    document.getElementById('runBtn').click();
+    await vi.waitFor(() => {
+      expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(4);
+      expect(requests.filter(({ url }) => url === '/log_action')).toHaveLength(3);
+      expect(document.getElementById('feedbackContainer').textContent).toContain(
+        'No structural changes were found.',
+      );
+    });
+  });
+
+  it('requests fresh hints after switching exercises with identical starter code', async () => {
+    const sameStarterExercises = exercises.map((exercise) => ({ ...exercise }));
+    sameStarterExercises[1].start_method = sameStarterExercises[0].start_method;
+    const { requests } = mockBackend({ exerciseData: sameStarterExercises });
+
+    await initializeRefactoringTutor();
+    document.getElementById('gethinttree').click();
+    await vi.waitFor(() => expect(requests.filter(({ url }) => url === '/hint_tree')).toHaveLength(1));
+
+    const selector = document.getElementById('exerciseSelect');
+    selector.value = sameStarterExercises[1].id;
+    selector.dispatchEvent(new Event('input', { bubbles: true }));
+    await vi.waitFor(() => {
+      expect(document.getElementById('exname').textContent).toBe('Exercise 1.busTicketPrice');
+      expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(2);
+    });
+
+    document.getElementById('gethinttree').click();
+    await vi.waitFor(() => {
+      expect(requests.filter(({ url }) => url === '/hint_tree')).toHaveLength(2);
+      expect(document.querySelectorAll('.hint-block')).toHaveLength(2);
+    });
   });
 
   it('does not request quality hints when the diagnosis is not equivalent', async () => {
     const { requests } = mockBackend({ diagnosis: { status: 'notequiv', reason: 'A test failed.' } });
 
-    await initApp();
+    await initializeRefactoringTutor();
     document.getElementById('gethinttree').click();
 
     await vi.waitFor(() => {
@@ -161,7 +233,7 @@ describe('exercise and hint workflows', () => {
   it('reveals hint cards and expands a hint through code and reason', async () => {
     const { requests } = mockBackend();
 
-    await initApp();
+    await initializeRefactoringTutor();
     document.getElementById('gethinttree').click();
 
     await vi.waitFor(() => {
@@ -205,7 +277,7 @@ describe('exercise and hint workflows', () => {
       diagnoses: [{ status: 'correct' }, { status: 'compile_error', message: 'Missing semicolon' }],
     });
 
-    await initApp();
+    await initializeRefactoringTutor();
     editor.setValue(submittedCode);
     document.getElementById('runBtn').click();
 
@@ -245,7 +317,7 @@ describe('exercise and hint workflows', () => {
       ],
     });
 
-    await initApp();
+    await initializeRefactoringTutor();
     editor.setValue(submittedCode);
     document.getElementById('runBtn').click();
 
@@ -284,7 +356,7 @@ describe('exercise and hint workflows', () => {
       },
     });
 
-    await initApp();
+    await initializeRefactoringTutor();
     editor.setValue(submittedCode);
     document.getElementById('runBtn').click();
 
@@ -322,7 +394,7 @@ describe('exercise and hint workflows', () => {
       ],
     });
 
-    await initApp();
+    await initializeRefactoringTutor();
     const submittedCode = 'public static boolean isOvenReady(int temperature) { return true; }';
     editor.setValue(submittedCode);
     document.getElementById('runBtn').click();
@@ -344,7 +416,7 @@ describe('exercise and hint workflows', () => {
       diagnosisFailures: [null, 'Diagnosis service unavailable'],
     });
 
-    await initApp();
+    await initializeRefactoringTutor();
     editor.setValue('changed code');
     document.getElementById('runBtn').click();
 
@@ -358,10 +430,19 @@ describe('exercise and hint workflows', () => {
     expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(2);
   });
 
+  it('leaves logout beacon registration to the login module', async () => {
+    mockBackend();
+    const addEventListener = vi.spyOn(window, 'addEventListener');
+
+    await initializeRefactoringTutor();
+
+    expect(addEventListener).not.toHaveBeenCalledWith('beforeunload', expect.any(Function));
+  });
+
   it('clears hint spinners when the hint request fails', async () => {
     mockBackend({ hintFailure: 'Hints unavailable' });
 
-    await initApp();
+    await initializeRefactoringTutor();
     document.getElementById('gethinttree').click();
 
     await vi.waitFor(() => {
@@ -377,7 +458,7 @@ describe('exercise and hint workflows', () => {
   it('shows a completion message for an empty hint tree', async () => {
     mockBackend({ hints: { hint_tree: { Tree: ['Suggested Refactorings', 'hint', [], 0, -1, {}] }, suggestions: [] } });
 
-    await initApp();
+    await initializeRefactoringTutor();
     document.getElementById('gethinttree').click();
 
     await vi.waitFor(() => {
@@ -391,7 +472,7 @@ describe('exercise and hint workflows', () => {
   it('shows hint service errors without rendering a hint tree', async () => {
     mockBackend({ hints: { error: 'Rate limit reached' } });
 
-    await initApp();
+    await initializeRefactoringTutor();
     document.getElementById('gethinttree').click();
 
     await vi.waitFor(() => {
@@ -401,5 +482,84 @@ describe('exercise and hint workflows', () => {
     });
     expect(document.querySelector('.hint-block')).toBeNull();
     expect(document.querySelector('.inline-spinner')).toBeNull();
+  });
+
+  it('does not interpret model-provided hint content as HTML', async () => {
+    const hostileText = '<img src=x onerror="window.__xss=1">';
+    const hostileHintTree = {
+      Tree: [
+        'Suggested Refactorings',
+        'hint',
+        [
+          {
+            Tree: [
+              hostileText,
+              'hint',
+              [{ Tree: [hostileText, 'hint', [], 2, -1, {}] }],
+              1,
+              -1,
+              { refactored_code: hostileText, reason: hostileText },
+            ],
+          },
+        ],
+        0,
+        -1,
+        {},
+      ],
+    };
+    mockBackend({ hints: { hint_tree: hostileHintTree, suggestions: [] } });
+
+    await initializeRefactoringTutor();
+    document.getElementById('gethinttree').click();
+    await vi.waitFor(() => expect(document.querySelector('.hint-block')).not.toBeNull());
+
+    const hint = document.querySelector('.hint-block');
+    hint.querySelector('md-text-button').click();
+    hint.querySelector('md-text-button').click();
+    await vi.waitFor(() => expect(hint.querySelector('md-outlined-button')).not.toBeNull());
+    hint.querySelector('md-outlined-button').click();
+
+    expect(hint.querySelectorAll('img, script, iframe, [onerror], [onload]')).toHaveLength(0);
+  });
+
+  it('does not interpret markdown feedback from the server as executable HTML', async () => {
+    const hostileFeedback = '**Safe feedback**\n<img src=x onerror="window.__xss=1">';
+    mockBackend({
+      diagnoses: [
+        { status: 'correct' },
+        {
+          status: 'notequiv',
+          call: 'isOvenReady(150)',
+          expected: 'true',
+          actual: 'false',
+          reason: 'Values differ',
+        },
+      ],
+      notEquivalentFeedback: { error_summary: hostileFeedback },
+    });
+
+    await initializeRefactoringTutor();
+    editor.setValue('changed code');
+    document.getElementById('runBtn').click();
+    await vi.waitFor(() => expect(document.querySelector('.feedback-markdown')).not.toBeNull());
+
+    const markdown = document.querySelector('.feedback-markdown');
+    expect(markdown.querySelectorAll('script, iframe, [onerror], [onload]')).toHaveLength(0);
+    expect(markdown.querySelector('strong')?.textContent).toBe('Safe feedback');
+  });
+
+  it('does not interpret hint-service error messages as HTML', async () => {
+    const hostileError = '<img src=x onerror="window.__xss=1">';
+    mockBackend({ hints: { error: hostileError } });
+
+    await initializeRefactoringTutor();
+    document.getElementById('gethinttree').click();
+    await vi.waitFor(() => {
+      expect(document.querySelector('#feedbackContainer .failure')).not.toBeNull();
+    });
+
+    expect(
+      document.getElementById('feedbackContainer').querySelectorAll('img, script, iframe, [onerror], [onload]'),
+    ).toHaveLength(0);
   });
 });

@@ -1,10 +1,12 @@
+"""Routes and session locks for user authentication."""
+
 import time
 from threading import RLock
 from typing import Dict
 
 from fastapi import APIRouter, HTTPException, Request
 
-from backend.database import authenticate_user
+from backend.database import authenticate_user_credentials
 from backend.schemas import LoginRequest, LogoutRequest
 
 LOGIN_LOCK_TTL_SECONDS = 2400
@@ -13,6 +15,8 @@ router = APIRouter()
 
 
 def claim_user_session(username: str, sessions: Dict[str, float], user_lock) -> bool:
+    """Reserve a username when it has no active session."""
+
     with user_lock:
         now = time.time()
         prune_expired_user_sessions(now, sessions)
@@ -25,6 +29,8 @@ def claim_user_session(username: str, sessions: Dict[str, float], user_lock) -> 
 
 
 def prune_expired_user_sessions(now: float, sessions: Dict[str, float]) -> None:
+    """Remove sessions that have expired."""
+
     expired_users = [
         username for username, locked_at in sessions.items()
         if now - locked_at >= LOGIN_LOCK_TTL_SECONDS
@@ -34,10 +40,12 @@ def prune_expired_user_sessions(now: float, sessions: Dict[str, float]) -> None:
 
 
 @router.post("/login")
-async def login(data: LoginRequest, request: Request):
-    user = authenticate_user(
-        data.username,
-        data.password,
+async def login_user(request_data: LoginRequest, request: Request):
+    """Authenticate a user and start a session."""
+
+    user = authenticate_user_credentials(
+        request_data.username,
+        request_data.password,
         request.app.state.database_config,
     )
     if not user:
@@ -54,8 +62,10 @@ async def login(data: LoginRequest, request: Request):
 
 
 @router.post("/logout")
-async def logout(data: LogoutRequest, request: Request):
-    username = data.username
+async def logout_user(request_data: LogoutRequest, request: Request):
+    """End the session for a username."""
+
+    username = request_data.username
     print(f"Logout request for user: {username}")
     with request.app.state.user_lock:
         request.app.state.active_user_sessions.pop(username, None)

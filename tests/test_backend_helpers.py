@@ -1,9 +1,9 @@
 from backend.services.feedback import build_hint_tree
-from backend.services.diagnosis import build_java_program, generate_test_code, parse_test_output
+from backend.services.diagnosis import build_java_execution_harness, build_java_test_runner_code, parse_test_result_line
 
 
 def test_build_java_program_wraps_submission_and_tests():
-    result = build_java_program("public static int answer() { return 42; }", "System.out.println(answer());")
+    result = build_java_execution_harness("public static int answer() { return 42; }", "System.out.println(answer());")
 
     assert result == (
         "public class Main {\n"
@@ -15,7 +15,7 @@ def test_build_java_program_wraps_submission_and_tests():
 
 
 def test_generate_test_code_formats_booleans_and_arrays():
-    result = generate_test_code(
+    result = build_java_test_runner_code(
         "count",
         "int",
         [
@@ -33,12 +33,12 @@ def test_generate_test_code_formats_booleans_and_arrays():
 
 
 def test_parse_test_output_extracts_fields_and_rejects_invalid_lines():
-    assert parse_test_output("TEST_RESULT:2|expected=7|actual= 8 ") == {
+    assert parse_test_result_line("TEST_RESULT:2|expected=7|actual= 8 ") == {
         "index": 2,
         "expected": "7",
         "actual": "8",
     }
-    assert parse_test_output("not a test result") is None
+    assert parse_test_result_line("not a test result") is None
 
 
 def test_build_hint_tree_links_hints_code_and_sibling_suggestions():

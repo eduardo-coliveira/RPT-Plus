@@ -1,9 +1,13 @@
+"""Send Java source to Judge0."""
+
 import requests
 
 JUDGE0_URL = "https://ce.judge0.com/submissions"
 
 
 def submit_to_judge0(source_code: str):
+    """Submit Java source and return the response."""
+
     response = requests.post(
         f"{JUDGE0_URL}?wait=true",
         json={

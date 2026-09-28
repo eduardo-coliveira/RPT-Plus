@@ -66,7 +66,7 @@ def db_config():
 def fake_db(monkeypatch, db_config):
     cursor = FakeCursor()
     connection = FakeConnection(cursor)
-    monkeypatch.setattr(database, "get_db_connection", lambda config: connection)
+    monkeypatch.setattr(database, "open_database_connection", lambda config: connection)
     return cursor, connection, db_config
 
 
@@ -93,16 +93,16 @@ def test_database_config_rejects_missing_environment(monkeypatch):
         database.DatabaseConfig.from_env()
 
 
-def test_init_db_runs_migrations_then_seeds_default_users(monkeypatch, fake_db):
+def test_initialize_database_runs_migrations_then_seeds_users(monkeypatch, fake_db):
     cursor, connection, config = fake_db
     cursor.rows = iter([(0,)])
     migration = Mock()
-    monkeypatch.setattr(database, "run_migrations", migration)
+    monkeypatch.setattr(database, "apply_database_migrations", migration)
     users = [
         {"username": "learner-a", "password": "secret-a", "group_name": "group-a"},
         {"username": "learner-b", "password": "secret-b", "group_name": "group-b"},
     ]
-    database.init_db(config, json.dumps(users))
+    database.initialize_database(config, json.dumps(users))
 
     migration.assert_called_once_with(config)
     assert cursor.executed[0] == ("SELECT COUNT(*) FROM users", None)
@@ -144,11 +144,11 @@ def test_initial_migration_creates_schema_and_tracks_revision(tmp_path):
     ],
     ids=["matching-user", "unknown-user-or-password"],
 )
-def test_authenticate_user_returns_matching_row_or_none(fake_db, row, expected):
+def test_authenticate_user_credentials_returns_matching_row_or_none(fake_db, row, expected):
     cursor, _, config = fake_db
     cursor.rows = iter([row])
 
-    result = database.authenticate_user("learner", "password", config)
+    result = database.authenticate_user_credentials("learner", "password", config)
 
     assert result == expected
     assert cursor.executed == [
@@ -159,21 +159,21 @@ def test_authenticate_user_returns_matching_row_or_none(fake_db, row, expected):
     ]
 
 
-def test_authenticate_user_returns_none_when_database_fails(monkeypatch, db_config):
+def test_authenticate_user_credentials_returns_none_when_database_fails(monkeypatch, db_config):
     monkeypatch.setattr(
         database,
-        "get_db_connection",
+        "open_database_connection",
         _raise_database_error,
     )
 
-    assert database.authenticate_user("learner", "password", db_config) is None
+    assert database.authenticate_user_credentials("learner", "password", db_config) is None
 
 
-def test_log_action_entry_inserts_for_known_user_and_commits(fake_db):
+def test_record_action_log_inserts_for_known_user_and_commits(fake_db):
     cursor, connection, config = fake_db
     cursor.rows = iter([{"id": 17}])
 
-    result = database.log_action_entry(
+    result = database.record_action_log(
         username="learner",
         exercise="0.isOvenReady",
         current_code="return true;",
@@ -205,11 +205,11 @@ def test_log_action_entry_inserts_for_known_user_and_commits(fake_db):
     assert connection.committed
 
 
-def test_log_action_entry_skips_insert_for_unknown_user(fake_db):
+def test_record_action_log_skips_insert_for_unknown_user(fake_db):
     cursor, connection, config = fake_db
     cursor.rows = iter([None])
 
-    result = database.log_action_entry(
+    result = database.record_action_log(
         username="missing",
         exercise="0.isOvenReady",
         current_code="code",
@@ -222,14 +222,14 @@ def test_log_action_entry_skips_insert_for_unknown_user(fake_db):
     assert not connection.committed
 
 
-def test_log_action_entry_returns_false_when_database_fails(monkeypatch, db_config):
+def test_record_action_log_returns_false_when_database_fails(monkeypatch, db_config):
     monkeypatch.setattr(
         database,
-        "get_db_connection",
+        "open_database_connection",
         _raise_database_error,
     )
 
-    result = database.log_action_entry(
+    result = database.record_action_log(
         username="learner",
         exercise="0.isOvenReady",
         current_code="code",

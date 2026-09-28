@@ -1,3 +1,5 @@
+"""Prompt templates for diagnosis and refactoring feedback."""
+
 # from refactoring_misconceptions.errors import ALL_SNIPPETS
 # from backend.hint_examples import HINT_TREE_EXAMPLES
 

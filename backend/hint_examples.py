@@ -1,6 +1,11 @@
 from refactoring_misconceptions.errors import ALL_SNIPPETS
 
+"""Helpers for looking up hint examples."""
+
+
 def get_snippet_by_id(snippet_id):
+    """Return the hint snippet with the given ID."""
+
     return next(s for s in ALL_SNIPPETS if s["id"] == snippet_id)
 
 HINT_TREE_EXAMPLES = [

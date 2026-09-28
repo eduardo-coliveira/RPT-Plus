@@ -1,11 +1,15 @@
-function showAppShell() {
+/** Handle login and session cleanup for the application. */
+
+/** Show the application after login. */
+function showAuthenticatedApp() {
   const nav = document.querySelector("nav");
   const main = document.querySelector("main");
   if (nav) nav.style.display = "";
   if (main) main.style.display = "";
 }
 
-function setLoginMessage(text, isError = true) {
+/** Show a login status message. */
+function displayLoginMessage(text, isError = true) {
   const message = document.getElementById("loginMessage");
   if (!message) return;
   message.textContent = text;
@@ -14,16 +18,17 @@ function setLoginMessage(text, isError = true) {
     : "var(--md-sys-color-on-surface)";
 }
 
-async function handleLoginSubmit(event) {
+/** Submit credentials, start the user session, and start the tutor app. */
+async function submitLogin(event) {
   event.preventDefault();
-  setLoginMessage("");
+  displayLoginMessage("");
 
   const username = document.getElementById("loginUsername")?.value.trim();
   const password = document.getElementById("loginPassword")?.value;
   const button = event.currentTarget.querySelector("button");
 
   if (!username || !password) {
-    setLoginMessage("Please enter both username and password.");
+    displayLoginMessage("Please enter both username and password.");
     return;
   }
 
@@ -39,7 +44,7 @@ async function handleLoginSubmit(event) {
 
     if (!response.ok) {
       const error = await response.json();
-      setLoginMessage(error.detail || "Login failed.");
+      displayLoginMessage(error.detail || "Login failed.");
       return;
     }
 
@@ -47,22 +52,23 @@ async function handleLoginSubmit(event) {
     window.currentUser = user;
     sessionStorage.setItem('loggedInUser', user.username);
     document.getElementById("loginOverlay").style.display = "none";
-    showAppShell();
+    showAuthenticatedApp();
 
     if (typeof window.startApp === "function") {
       window.startApp();
     }
   } catch (error) {
-    setLoginMessage(error.message || "Login failed.");
+    displayLoginMessage(error.message || "Login failed.");
   } finally {
     button.disabled = false;
     button.textContent = "Login";
   }
 }
 
-export function initLogin() {
+/** Register the login and unload handlers. */
+export function initializeLogin() {
   const form = document.getElementById("loginForm");
-  form?.addEventListener("submit", handleLoginSubmit);
+  form?.addEventListener("submit", submitLogin);
 
   window.addEventListener('beforeunload', () => {
     const loggedInUser = sessionStorage.getItem('loggedInUser');
@@ -77,5 +83,5 @@ export function initLogin() {
 
 }
 
-window.initLogin = initLogin;
-document.addEventListener("DOMContentLoaded", initLogin);
+window.initializeLogin = initializeLogin;
+document.addEventListener("DOMContentLoaded", initializeLogin);

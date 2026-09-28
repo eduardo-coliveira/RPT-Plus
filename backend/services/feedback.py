@@ -1,25 +1,35 @@
+"""Build prompt data and hint trees for feedback."""
+
 from typing import Dict, List
 
 
-def build_code_prompt_context(data, exercise: Dict) -> Dict:
+def build_prompt_context(request_data, exercise: Dict) -> Dict:
+    """Combine a feedback request with the exercise description."""
+
     return {
-        "submitted_code": data.submitted_code,
-        "previous_code": data.previous_code,
+        "submitted_code": request_data.submitted_code,
+        "previous_code": request_data.previous_code,
         "method_explanation": exercise["description"],
     }
 
 
-def generate_notequiv_feedback(data, exercise: Dict, client_wrapper) -> Dict:
-    test_case_failure = data.test_case_failure or "A test failed."
-    prompt_data = build_code_prompt_context(data, exercise)
+def generate_non_equivalence_feedback(request_data, exercise: Dict, client_wrapper) -> Dict:
+    """Explain why a refactoring changed behavior."""
+
+    test_case_failure = request_data.test_case_failure or "A test failed."
+    prompt_data = build_prompt_context(request_data, exercise)
     prompt_data["test_case_failure"] = test_case_failure
-    prompt_type = "ERROR" if data.hint_group == "STATE-BASED" else "STEP_ERROR"
-    response = client_wrapper.call(prompt_type, prompt_data)
+    prompt_type = "ERROR" if request_data.hint_group == "STATE-BASED" else "STEP_ERROR"
+    response = client_wrapper.request_structured_response(prompt_type, prompt_data)
     return {"error_summary": response.error_summary}
 
 
 def build_hint_tree(suggestions: List[Dict]) -> Dict:
-    def make_node(text, hint_type, index, children=None, meta=None):
+    """Turn model suggestions into a hint tree."""
+
+    def create_hint_node(text, hint_type, index, children=None, meta=None):
+        """Create one hint tree node."""
+
         return {
             "Tree": [
                 text,
@@ -32,6 +42,8 @@ def build_hint_tree(suggestions: List[Dict]) -> Dict:
         }
 
     def attach_hint_chain(suggestion: Dict, index_start: int):
+        """Build the hint steps for one suggestion."""
+
         index = index_start
         meta = {
             "title": suggestion.get("title"),
@@ -42,12 +54,12 @@ def build_hint_tree(suggestions: List[Dict]) -> Dict:
         }
 
         general = suggestion.get("general_hint") or "Consider refactoring this part of the code."
-        general_node = make_node(general, "hint", index, meta=meta)
+        general_node = create_hint_node(general, "hint", index, meta=meta)
         index += 1
 
         targeted = suggestion.get("targeted_hint")
         if targeted:
-            targeted_node = make_node(targeted, "hint", index)
+            targeted_node = create_hint_node(targeted, "hint", index)
             general_node["Tree"][2].append(targeted_node)
             index += 1
         else:
@@ -55,7 +67,7 @@ def build_hint_tree(suggestions: List[Dict]) -> Dict:
 
         refactored_code = suggestion.get("refactored_code")
         if refactored_code:
-            code_node = make_node(refactored_code, "code", index)
+            code_node = create_hint_node(refactored_code, "code", index)
             (targeted_node or general_node)["Tree"][2].append(code_node)
             index += 1
 
@@ -71,3 +83,7 @@ def build_hint_tree(suggestions: List[Dict]) -> Dict:
         tree_nodes[index]["Tree"][4] = tree_nodes[index + 1]["Tree"][3]
 
     return {"Tree": ["Suggested Refactorings", "hint", tree_nodes, 0, -1, {}]}
+
+
+build_code_prompt_context = build_prompt_context
+generate_notequiv_feedback = generate_non_equivalence_feedback

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { initLogin } from './login.js';
+import { initializeLogin } from './login.js';
 
 describe('login form', () => {
   let beforeUnloadHandlers;
@@ -26,7 +26,7 @@ describe('login form', () => {
       if (type === 'beforeunload') beforeUnloadHandlers.push(listener);
       return addEventListener(type, listener, options);
     });
-    initLogin();
+    initializeLogin();
   });
 
   afterEach(() => {

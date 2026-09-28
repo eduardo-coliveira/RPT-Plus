@@ -25,14 +25,14 @@ def _unexpected_external_call(*args, **kwargs):
 
 @pytest.fixture
 def client(monkeypatch):
-    monkeypatch.setattr(api, "init_db", lambda config: None)
+    monkeypatch.setattr(api, "initialize_database", lambda config: None)
     monkeypatch.setattr(
         api,
-        "get_client_wrapper",
-        lambda config: SimpleNamespace(call=_unexpected_external_call),
+        "create_llm_client",
+        lambda config: SimpleNamespace(request_structured_response=_unexpected_external_call),
     )
-    monkeypatch.setattr(auth, "authenticate_user", _unexpected_external_call)
-    monkeypatch.setattr(actions, "log_action_entry", _unexpected_external_call)
+    monkeypatch.setattr(auth, "authenticate_user_credentials", _unexpected_external_call)
+    monkeypatch.setattr(actions, "record_action_log", _unexpected_external_call)
     monkeypatch.setattr(judge0.requests, "post", _unexpected_external_call)
     test_app = api.create_app()
     with TestClient(test_app) as test_client:

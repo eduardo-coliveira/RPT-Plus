@@ -3,7 +3,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from backend.prompting import LLMClientWrapper, LLMConfig
+from backend.prompting import LLMConfig, StructuredOutputClient
 from backend.schemas import RefactoringSteps
 
 
@@ -19,14 +19,14 @@ def test_call_renders_prompt_without_mutating_input_data():
     response = object()
     create = Mock(return_value=response)
     config = LLMConfig(api_key="test-key", model="test-model", max_tokens=512)
-    wrapper = LLMClientWrapper(make_client(create), config)
+    wrapper = StructuredOutputClient(make_client(create), config)
     prompt_data = {
         "previous_code": "return true;",
         "submitted_code": "return false;",
     }
     original_prompt_data = prompt_data.copy()
 
-    result = wrapper.call("PRESENT", prompt_data, max_tokens=128)
+    result = wrapper.request_structured_response("PRESENT", prompt_data, max_tokens=128)
 
     assert result is response
     assert prompt_data == original_prompt_data
@@ -41,13 +41,13 @@ def test_call_renders_prompt_without_mutating_input_data():
 
 def test_call_rejects_unknown_prompt_type_without_calling_client():
     create = Mock()
-    wrapper = LLMClientWrapper(
+    wrapper = StructuredOutputClient(
         make_client(create),
         LLMConfig(api_key="test-key", model="test-model"),
     )
 
     with pytest.raises(ValueError, match="Unknown prompt_type: UNKNOWN"):
-        wrapper.call("UNKNOWN", {})
+        wrapper.request_structured_response("UNKNOWN", {})
 
     create.assert_not_called()
 

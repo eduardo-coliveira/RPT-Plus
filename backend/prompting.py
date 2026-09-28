@@ -1,3 +1,5 @@
+"""Set up prompts and the LLM client."""
+
 from dataclasses import dataclass, field
 from typing import Type, get_args, get_origin
 from pydantic import BaseModel
@@ -24,6 +26,8 @@ from backend.schemas import RefactoringSteps, SimpleError, SuggestedRefactorings
 
 @dataclass(frozen=True)
 class PromptDefinition:
+    """Store a prompt template and its response model."""
+
     system_prompt: str
     user_prompt_template: str
     response_model: Type[BaseModel]
@@ -31,12 +35,16 @@ class PromptDefinition:
 
 @dataclass(frozen=True)
 class LLMConfig:
+    """Settings for the LLM client."""
+
     api_key: str = field(repr=False)
     model: str
     max_tokens: int = 1000
 
     @classmethod
     def from_env(cls) -> "LLMConfig":
+        """Build LLM settings from the environment."""
+
         api_key = os.environ.get("MISTRAL_API_KEY")
         if not api_key:
             raise ValueError("MISTRAL_API_KEY is required")
@@ -70,27 +78,31 @@ PROMPT_DEFINITIONS = {
     ),
 }
 
-class LLMClientWrapper:
+class StructuredOutputClient:
+    """Render prompts and request model responses."""
+
     def __init__(self, client, config: LLMConfig):
         self.client = client
         self.config = config
         self.prompt_definitions = PROMPT_DEFINITIONS
 
-    def call(self, prompt_type: str, prompt_data: dict, temperature: float = 0.0, max_tokens: int | None = None, **kwargs) -> BaseModel:
+    def request_structured_response(self, prompt_type: str, prompt_data: dict, temperature: float = 0.0, max_tokens: int | None = None, **kwargs) -> BaseModel:
+        """Send a named prompt and return its parsed response."""
+
         definition = self.prompt_definitions.get(prompt_type)
         if definition is None:
             raise ValueError(f"Unknown prompt_type: {prompt_type}")
 
-        render_data = dict(prompt_data)
-        render_data["fields"] = describe_model_fields(definition.response_model)
+        prompt_template_values = dict(prompt_data)
+        prompt_template_values["fields"] = describe_model_fields(definition.response_model)
 
         token_budget = max_tokens if max_tokens is not None else self.config.max_tokens
 
-        call_args = {
+        completion_arguments = {
             "model": self.config.model,
             "messages": [
                 {"role": "system", "content": definition.system_prompt},
-                {"role": "user", "content": definition.user_prompt_template.format(**render_data)},
+                {"role": "user", "content": definition.user_prompt_template.format(**prompt_template_values)},
             ],
             "response_model": definition.response_model,
             "temperature": temperature,
@@ -98,19 +110,23 @@ class LLMClientWrapper:
             **kwargs
         }
 
-        response = self.client.chat.completions.create(**call_args)
+        model_response = self.client.chat.completions.create(**completion_arguments)
         # print(response)
-        return response
-    
-def get_client_wrapper(config: LLMConfig):
+        return model_response
+
+def create_llm_client(config: LLMConfig):
+    """Create the LLM client used by the application."""
+
     client = instructor.from_mistral(
         Mistral(api_key=config.api_key),
         mode=instructor.Mode.MISTRAL_STRUCTURED_OUTPUTS,
     )
-    return LLMClientWrapper(client, config)
+    return StructuredOutputClient(client, config)
 
 
 def describe_model_fields(model: Type[BaseModel], indent: int = 0) -> str:
+    """Describe a response model's fields for a prompt."""
+
     lines = []
     prefix = "  " * indent
     for field_name, field in model.model_fields.items():
@@ -136,4 +152,9 @@ def describe_model_fields(model: Type[BaseModel], indent: int = 0) -> str:
             lines.append(f"{prefix}- {field_name}: {description}")
 
     return "\n".join(lines)
+
+
+# Compatibility aliases for the excluded run_notequiv_feedback.py script.
+LLMClientWrapper = StructuredOutputClient
+get_client_wrapper = create_llm_client
 

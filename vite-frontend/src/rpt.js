@@ -1,1058 +1,456 @@
-// Refactored RPT Frontend
-import { marked } from 'marked';
+/** Manage exercise loading, diagnosis, hints, feedback, and action logging. */
 
-// Configure marked to sanitize HTML and handle line breaks
-marked.setOptions({
-  sanitize: true, // Sanitize HTML to prevent XSS attacks
-  breaks: true,   // Convert line breaks to <br>
-});
+import * as rptApi from './rptApi.js';
+import * as rptView from './rptView.js';
 
-// Helper function to render Markdown feedback
-function renderMarkdownFeedback(markdownText) {
-  // Convert Markdown to HTML
-  const html = marked.parse(markdownText);
+const workflowState = {
+  availableExercises: [],
+  selectedExerciseId: '1.even',
+  submittedCode: '',
+  lastKnownFunctionalCode: '',
+  previousSubmittedCode: '',
+  hints: [],
+  hintTree: undefined,
+  hintedCodeSnapshot: '',
+  isGeneratingHints: false,
+  hintRequestGeneration: 0,
+  diagnosisResult: '',
+  lastDiagnosedCode: '',
+  diagnosedCodeSnapshot: '',
+};
 
-  // Create a container for the feedback
-  const container = document.createElement('div');
-  container.className = 'feedback-markdown';
-  container.innerHTML = html;
-
-  return container;
-}
-
-const apiUrl = "";
-
-let exercises = [];
-let currentExerciseId = "1.even";
-let submittedCode = "";
-let previousFunctionalCode = "";
-let previousCode = "";
-let currentHints = [];
-let currentHintTree;
-let lastHintedCode = "";
-let isGeneratingHints = false;
-let diagnosis = "";
-let lastDiagnosedCode = "";
-let cachedDiagnosisCode = "";
-
-async function logUserAction(action, details = {}) {
-  const user = window.currentUser || { username: "anonymous", group: "unknown" };
+/** Record a learner action with the current exercise context. */
+async function recordUserAction(action, details = {}) {
+  const user = window.currentUser || { username: 'anonymous', group: 'unknown' };
   const payload = {
     username: user.username,
     group: user.group,
-    exercise: currentExerciseId,
-    current_code: typeof editor !== "undefined" ? editor.getValue() : "",
+    exercise: workflowState.selectedExerciseId,
+    current_code: typeof editor !== 'undefined' ? editor.getValue() : '',
     action,
-    previous_code: details.previous_code ?? previousCode,
+    previous_code: details.previous_code ?? workflowState.previousSubmittedCode,
     code_status: details.code_status ?? null,
     feedback: details.feedback ?? null,
     hint_tree: details.hint_tree ?? null,
   };
 
   try {
-    await fetch(`${apiUrl}/log_action`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-  } catch (err) {
-    console.warn("Action logging failed:", err);
+    await rptApi.recordAction(payload);
+  } catch (error) {
+    console.warn('Action logging failed:', error);
   }
 }
 
-export async function initApp() {
-  await loadExercises();
-  document.getElementById("runBtn").addEventListener("click", (event) => {
-    handleRun(event);
+/** Start the tutor workflow and register its controls. */
+export async function initializeRefactoringTutor() {
+  await loadExerciseCatalog();
+  document.getElementById('runBtn').addEventListener('click', () => {
+    void handleCodeSubmission();
   });
-  document.getElementById("gethinttree").addEventListener("click", () => {
-    void handleHints();
+  document.getElementById('gethinttree').addEventListener('click', () => {
+    void handleHintRequest();
   });
-  // document.getElementById("loadex").addEventListener("click", () => {
-  //   void logUserAction("RestartExercise");
-  //   loadExercise(currentExerciseId);
-  // });
-  // document.getElementById("exerciseSelect").addEventListener("input", (e) => {
-  //   currentExerciseId = e.target.value;
-  //   void logUserAction("NewExercise");
-  //   loadExercise(currentExerciseId);
-  // });
-  document.getElementById("loadex").addEventListener("click", async () => {
-    await loadExercise(currentExerciseId);  // Load FIRST
-    await logUserAction("RestartExercise");  // Log AFTER
+  document.getElementById('loadex').addEventListener('click', async () => {
+      await loadExerciseById(workflowState.selectedExerciseId);
+      await recordUserAction('RestartExercise');
   });
-  document.getElementById("exerciseSelect").addEventListener("input", async (e) => {
-    currentExerciseId = e.target.value;
-    await loadExercise(currentExerciseId);  // Load FIRST
-    await logUserAction("NewExercise");     // Log AFTER
-  });
-
-  window.addEventListener('beforeunload', () => {
-    const loggedInUser = sessionStorage.getItem('loggedInUser');
-    if (loggedInUser) {
-      const blob = new Blob(
-        [JSON.stringify({ username: loggedInUser })],
-        { type: 'application/json' }
-      );
-      navigator.sendBeacon('/logout', blob);
-    }
+  document.getElementById('exerciseSelect').addEventListener('input', async (event) => {
+    workflowState.selectedExerciseId = event.target.value;
+    await loadExerciseById(workflowState.selectedExerciseId);
+    await recordUserAction('NewExercise');
   });
 
 }
 
-window.startApp = initApp;
+window.startApp = initializeRefactoringTutor;
 
-async function loadExercises() {
-  const res = await fetch(`${apiUrl}/exercises`);
-  exercises = await res.json();
-  const select = document.getElementById("exerciseSelect");
-  select.innerHTML = "";
+/** Load the exercise catalog and fill the exercise selector. */
+async function loadExerciseCatalog() {
+  workflowState.availableExercises = await rptApi.fetchExerciseSummaries();
+  const select = document.getElementById('exerciseSelect');
+  select.innerHTML = '';
 
-  let defaultExercise = exercises.find(ex => ex.id === "0.isOvenReady") || exercises[0];
-  currentExerciseId = defaultExercise.id;
+  const defaultExercise = workflowState.availableExercises.find((exercise) => exercise.id === '0.isOvenReady') || workflowState.availableExercises[0];
+  workflowState.selectedExerciseId = defaultExercise.id;
 
-  exercises.forEach((ex) => {
-    const option = document.createElement("md-select-option");
-    option.value = ex.id;
-    option.textContent = ex.id;
-    if (ex.id === currentExerciseId) option.setAttribute("selected", "true");
+  workflowState.availableExercises.forEach((exercise) => {
+    const option = document.createElement('md-select-option');
+    option.value = exercise.id;
+    option.textContent = exercise.id;
+    if (exercise.id === workflowState.selectedExerciseId) option.setAttribute('selected', 'true');
     select.appendChild(option);
   });
 
-  if (currentExerciseId) {
-    await loadExercise(currentExerciseId);
-  }
+  if (workflowState.selectedExerciseId) await loadExerciseById(workflowState.selectedExerciseId);
 }
 
+/** Load an exercise, reset its state, and diagnose its starter code. */
+async function loadExerciseById(exerciseId) {
+  workflowState.hintRequestGeneration += 1;
+  workflowState.isGeneratingHints = false;
+  rptView.clearMessages();
+  resetHintState();
+  rptView.clearHintDisplay();
+  rptView.setLoadingIndicatorVisible(false);
+  document.getElementById('newhint')?.remove();
 
-async function loadExercise(id) {
-  clearMessages();
-  resetHintCache();
-  clearHintDisplay();
-  hideSpinner();
-  document.getElementById("newhint")?.remove();
-  const res = await fetch(`${apiUrl}/exercise/${id}`);
-  const ex = await res.json();
+  const exercise = await rptApi.fetchExerciseById(exerciseId);
+  document.getElementById('exname').textContent = `Exercise ${exercise.id}`;
+  document.getElementById('exdesc').textContent = exercise.description;
 
-  document.getElementById("exname").textContent = `Exercise ${ex.id}`;
-  document.getElementById("exdesc").textContent = ex.description;
+  workflowState.submittedCode = exercise.start_method;
+  workflowState.lastKnownFunctionalCode = exercise.start_method;
+  workflowState.previousSubmittedCode = exercise.start_method;
+  workflowState.diagnosisResult = null;
+  workflowState.lastDiagnosedCode = '';
+  editor.setValue(exercise.start_method, -1);
 
-  submittedCode = ex.start_method;
-  previousFunctionalCode = ex.start_method;
-  previousCode = ex.start_method;
+  const container = document.getElementById('refactoringCardContainer');
+  container.innerHTML = '';
+  container.style.display = 'none';
 
-  currentHints = [];
-  currentHintTree = null;
-  lastHintedCode = "";
-  // diagnosis = "";
-  // lastDiagnosedCode = ex.start_method;
-  diagnosis = null;
-  lastDiagnosedCode = "";
-  editor.setValue(ex.start_method, -1);
-
-  const container = document.getElementById("refactoringCardContainer");
-  container.innerHTML = "";
-  container.style.display = "none";
-
-  showSpinner();
-  const initialDiagnosis = await diagnoseCode();
-  hideSpinner();
+  rptView.setLoadingIndicatorVisible(true);
+  const initialDiagnosis = await requestCodeDiagnosis();
+  rptView.setLoadingIndicatorVisible(false);
 
   if (initialDiagnosis) {
-    diagnosis = initialDiagnosis;
-    lastDiagnosedCode = ex.start_method;
+    workflowState.diagnosisResult = initialDiagnosis;
+    workflowState.lastDiagnosedCode = exercise.start_method;
   }
 }
 
+/** Diagnose the current submission or show its cached diagnosis. */
+async function handleCodeSubmission() {
+  rptView.clearMessages();
+  rptView.clearHintDisplay();
+  workflowState.submittedCode = editor.getValue();
 
-async function handleRun() {
-  clearMessages();
-  clearHintDisplay();
-  // currentHintTree = null;
-  // currentHints = [];
-  // lastHintedCode = "";
-  submittedCode = editor.getValue();
-
-  // if (!isNewSubmission()) {
-  //   showMsg("You haven't changed the code.", msgtype.WARNING);
-  //   return;
-  // }
-  if (!isNewSubmission()) {
-    const reused = await replayCachedDiagnosis();
-
-    if (!reused) {
-      showMsg("You haven't changed the code.", msgtype.WARNING);
-    }
-
+  if (!hasUnprocessedCodeChanges()) {
+    const reused = await replayCachedDiagnosisResult();
+    if (!reused) showFeedbackMessage("You haven't changed the code.", msgtype.WARNING);
     return;
   }
 
-  showSpinner();
-  const response = await diagnoseCode();
-  hideSpinner();
-
-  console.log("Response: ", response);
+  rptView.setLoadingIndicatorVisible(true);
+  const response = await requestCodeDiagnosis();
+  rptView.setLoadingIndicatorVisible(false);
+  console.log('Response: ', response);
 
   if (!response) return;
 
-  diagnosis = response;
-  cachedDiagnosisCode = submittedCode.trim();
-  lastDiagnosedCode = submittedCode;
+  workflowState.diagnosisResult = response;
+  workflowState.diagnosedCodeSnapshot = workflowState.submittedCode.trim();
+  workflowState.lastDiagnosedCode = workflowState.submittedCode;
 
-  if (response.status === "compile_error") {
-    await logUserAction("Diagnose", {
-      previous_code: previousCode,
-      code_status: response.status || "unknown",
+  if (response.status === 'compile_error') {
+    await recordUserAction('Diagnose', {
+      previous_code: workflowState.previousSubmittedCode,
+      code_status: response.status || 'unknown',
       feedback: response.message || null,
     });
-    previousCode = submittedCode;
-    return handleError(response.message);
-  }
-
-  if (response.status === "notequiv") {
-    // previousCode = submittedCode;
-    // return handleNotEquivalent(response);
-    await handleNotEquivalent(response);
-    previousCode = submittedCode;
+    workflowState.previousSubmittedCode = workflowState.submittedCode;
+    showCompileError(response.message);
     return;
   }
 
-  if (response.status === "correct") {
-    const feedback = await handleCorrect();
-    await logUserAction("Diagnose", {
-      previous_code: previousCode,
-      code_status: response.status || "unknown",
-      // feedback: feedback?.refactor_steps || null,
+  if (response.status === 'notequiv') {
+    await processNonEquivalentDiagnosis(response);
+    workflowState.previousSubmittedCode = workflowState.submittedCode;
+    return;
+  }
+
+  if (response.status === 'correct') {
+    const feedback = await processCorrectDiagnosis();
+    await recordUserAction('Diagnose', {
+      previous_code: workflowState.previousSubmittedCode,
+      code_status: response.status || 'unknown',
       feedback: JSON.stringify(feedback?.refactor_steps) || null,
     });
-    previousCode = submittedCode;
-    // return handleCorrect();
-    return;
+    workflowState.previousSubmittedCode = workflowState.submittedCode;
   }
 }
 
-async function handleCorrect() {
-  const feedbackPromise = showMsgWithSpinner(
-    "Generating explanations... ",
+/** Request and render feedback for a correct diagnosis. */
+async function processCorrectDiagnosis() {
+  const feedback = await showMessageWhileAwaiting(
+    'Generating explanations... ',
     msgtype.CORRECT,
-    generateCorrectFeedback(),
-    { prepend: true }
+    rptApi.requestRefactoringFeedback({
+      exercise_id: workflowState.selectedExerciseId,
+      submitted_code: workflowState.submittedCode,
+      previous_code: workflowState.lastKnownFunctionalCode,
+    }).catch((error) => {
+      showFeedbackMessage(`Server error: ${error.message}`, msgtype.FAILURE);
+    }),
+    { prepend: true },
   );
-  // const hintPromise = generateHints();
-  
-  // Start spinner for hints using your built-in function
-  // const hintResultPromise = showMsgWithSpinner(
-  //   "Looking for further improvements... ",
-  //   msgtype.HINT,
-  //   hintPromise
-  // );
-
-
-  // Handle feedback as soon as it's ready
-  const feedback = await feedbackPromise;
-  previousFunctionalCode = submittedCode;
-  // previousCode = submittedCode;
+  workflowState.lastKnownFunctionalCode = workflowState.submittedCode;
 
   if (feedback?.present_refactorings === false) {
-    showMsg(
-      feedback.general_feedback || "No structural or logic changes were found.",
-      msgtype.WARNING
-    );
+    showFeedbackMessage(feedback.general_feedback || 'No structural or logic changes were found.', msgtype.WARNING);
   } else if (feedback?.refactor_steps?.length > 0) {
     const steps = feedback.steps || feedback.refactor_steps;
-
-    const chip = document.createElement("div");
-    chip.className = `chip ${alertClasses[msgtype.CORRECT]}`;
-    chip.style.flexDirection = "column";
-    chip.style.alignItems = "stretch";
-
-    const header = document.createElement("div");
-    header.innerHTML = `<strong>${typeLabels[msgtype.CORRECT]}</strong>You performed ${steps.length} refactoring(s).`;
-    header.style.marginBottom = "8px";
-    chip.appendChild(header);
-
-    const embeddedCards = renderEmbeddedCards(steps);
-    embeddedCards.forEach(card => chip.appendChild(card));
-
-    document.getElementById("feedbackContainer").appendChild(chip);
+    document.getElementById('feedbackContainer').appendChild(
+      rptView.createRefactoringFeedbackChip(steps, typeLabels[msgtype.CORRECT], alertClasses[msgtype.CORRECT]),
+    );
   } else {
-    showMsg("No additional improvements detected.", msgtype.CORRECT);
+    showFeedbackMessage('No additional improvements detected.', msgtype.CORRECT);
   }
 
-  // When hint generation is done, show improvement summary
-  // const hintResult = await hintResultPromise;
-
-  // if (hintResult) {
-  //   currentHints = hintResult.suggestions || [];
-  //   currentHintTree = hintResult.hint_tree;
-
-  //   const numHints = currentHints.length;
-  //   const improvementMsg = numHints > 0
-  //     ? `There is still ${numHints} potential improvement${numHints > 1 ? "s" : ""} you can make.`
-  //     : "No additional improvements detected after analysis.";
-
-  //   showMsg(improvementMsg, numHints > 0 ? msgtype.WARNING : msgtype.CORRECT);
-  // }
-
-  //previousCode = submittedCode;
   return feedback;
 }
 
-
-
-
-
-async function diagnoseCode() {
+/** Ask the backend to diagnose the current code. */
+async function requestCodeDiagnosis() {
   try {
-    // previousCode = submittedCode;
-    const res = await fetch(`${apiUrl}/diagnose`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        exercise_id: currentExerciseId,
-        submitted_code: submittedCode,
-        previous_code: previousCode,
-        username: window.currentUser?.username || "anonymous",
-      })
+    return await rptApi.requestDiagnosis({
+      exercise_id: workflowState.selectedExerciseId,
+      submitted_code: workflowState.submittedCode,
+      previous_code: workflowState.previousSubmittedCode,
+      username: window.currentUser?.username || 'anonymous',
     });
-    return await res.json();;
-  } catch (err) {
-    showMsg(`Server error: ${err.message}`, msgtype.FAILURE);
+  } catch (error) {
+    showFeedbackMessage(`Server error: ${error.message}`, msgtype.FAILURE);
   }
 }
 
-async function generateNotEquivalentFeedback(data) {
-  const res = await fetch(`${apiUrl}/notequiv_feedback`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      exercise_id: currentExerciseId,
-      submitted_code: submittedCode,
-      previous_code: previousCode,
-      hint_group: window.currentUser?.group,
-      test_case_failure: data.reason
-    })
+/** Ask the backend to explain a change in behavior. */
+async function requestNonEquivalentFeedback(diagnosisData) {
+  const result = await rptApi.requestNonEquivalentFeedback({
+    exercise_id: workflowState.selectedExerciseId,
+    submitted_code: workflowState.submittedCode,
+    previous_code: workflowState.previousSubmittedCode,
+    hint_group: window.currentUser?.group,
+    test_case_failure: diagnosisData.reason,
   });
-
-  const result = await res.json();
   console.log(result);
   return result;
 }
 
-
-
-async function generateCorrectFeedback() {
-  try {
-    const res = await fetch(`${apiUrl}/correct_feedback`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        exercise_id: currentExerciseId,
-        submitted_code: submittedCode,
-        previous_code: previousFunctionalCode,
-      })
-    });
-    // previousCode = submittedCode;
-    return await res.json();
-  } catch (err) {
-    showMsg(`Server error: ${err.message}`, msgtype.FAILURE);
-  }
-}
-
-async function generateHints() {
+/** Diagnose the code when needed and request hints. */
+async function requestHintTree() {
+  const generation = workflowState.hintRequestGeneration;
+  const exerciseId = workflowState.selectedExerciseId;
   const currentEditorCode = editor.getValue();
-  const codeChangedSinceLastDiagnosis = currentEditorCode.trim() !== lastDiagnosedCode.trim();
+  const submittedCodeSnapshot = workflowState.submittedCode;
+  const previousCodeSnapshot = workflowState.previousSubmittedCode;
+  const codeChangedSinceLastDiagnosis = currentEditorCode.trim() !== workflowState.lastDiagnosedCode.trim();
   const hasCachedDiagnosis = hasCachedDiagnosisForCurrentCode();
-
-  let freshDiagnosis = hasCachedDiagnosis ? diagnosis : null;
+  let freshDiagnosis = hasCachedDiagnosis ? workflowState.diagnosisResult : null;
 
   if (!freshDiagnosis || codeChangedSinceLastDiagnosis) {
-    showSpinner();
-    freshDiagnosis = await diagnoseCode();
-    hideSpinner();
+    rptView.setLoadingIndicatorVisible(true);
+    freshDiagnosis = await requestCodeDiagnosis();
+    rptView.setLoadingIndicatorVisible(false);
+    if (generation !== workflowState.hintRequestGeneration) return null;
     if (!freshDiagnosis) {
-      showMsg("Failed to diagnose code. Please try again.", msgtype.WARNING);
+      showFeedbackMessage('Failed to diagnose code. Please try again.', msgtype.WARNING);
       return null;
     }
-    diagnosis = freshDiagnosis;
-    lastDiagnosedCode = currentEditorCode;
+    workflowState.diagnosisResult = freshDiagnosis;
+    workflowState.lastDiagnosedCode = currentEditorCode;
   }
 
-  // if (!freshDiagnosis || freshDiagnosis.status === undefined) {
-  //   showMsg(
-  //     "Run Diagnose first to confirm whether the code is functionally correct before requesting hints.",
-  //     msgtype.WARNING
-  //   );
-  //   return null;
-  // }
-
-  // diagnosis = freshDiagnosis;
-  // if (codeChangedSinceLastDiagnosis) {
-  //   lastDiagnosedCode = currentEditorCode;
-  // }
-
-  // Block hints if code is not correct
-  if (freshDiagnosis.status !== "correct") {
-    await logUserAction("GetHint", {
-      previous_code: previousCode,
-      code_status: freshDiagnosis?.status || "unknown",
+  if (freshDiagnosis.status !== 'correct') {
+    await recordUserAction('GetHint', {
+      previous_code: previousCodeSnapshot,
+      code_status: freshDiagnosis?.status || 'unknown',
       feedback: freshDiagnosis?.message || freshDiagnosis?.reason || null,
       hint_tree: null,
     });
-    showMsg(`You need to fix code functionality to get hints on code quality.`, msgtype.FAILURE);
+    if (generation !== workflowState.hintRequestGeneration) return null;
+    showFeedbackMessage('You need to fix code functionality to get hints on code quality.', msgtype.FAILURE);
     return null;
   }
 
-  if (isGeneratingHints) {
-    console.log("Hints already generating. Skipping...");
+  if (workflowState.isGeneratingHints) {
+    console.log('Hints already generating. Skipping...');
     return null;
   }
 
-  isGeneratingHints = true;
+  workflowState.isGeneratingHints = true;
   try {
-    const res = await fetch(`${apiUrl}/hint_tree`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        exercise_id: currentExerciseId,
-        submitted_code: submittedCode,
-        previous_code: previousCode,
-        hint_group: window.currentUser?.group,
-        code_diagnosis: freshDiagnosis.status || null,
-        username: window.currentUser?.username || "anonymous",
-      })
+    const data = await rptApi.requestHintTree({
+      exercise_id: exerciseId,
+      submitted_code: submittedCodeSnapshot,
+      previous_code: previousCodeSnapshot,
+      hint_group: window.currentUser?.group,
+      code_diagnosis: freshDiagnosis.status || null,
+      username: window.currentUser?.username || 'anonymous',
     });
-    // if (!res.ok) {
-    //   const errorData = await res.json().catch(() => ({}));
-    //   const message = errorData?.detail || "You need to wait 10 seconds to get LLM help.";
-    //   showMsg(message, msgtype.WARNING);
-    //   return null;
-    // }
+    if (generation !== workflowState.hintRequestGeneration) return null;
 
-    const data = await res.json();
-    // previousCode = submittedCode;
-
-    console.log("Hint response:", data);
-
+    console.log('Hint response:', data);
     if (data.error) {
-      showMsg(`Hint service error: ${data.error}`, msgtype.FAILURE);
+      showFeedbackMessage(`Hint service error: ${data.error}`, msgtype.FAILURE);
       return null;
     }
 
-    await logUserAction("GetHint", {
-      previous_code: previousCode,
-      code_status: freshDiagnosis?.status || "correct",
+    await recordUserAction('GetHint', {
+      previous_code: previousCodeSnapshot,
+      code_status: freshDiagnosis?.status || 'correct',
       hint_tree: data?.hint_tree ? JSON.stringify(data.hint_tree) : null,
       feedback: null,
     });
+    if (generation !== workflowState.hintRequestGeneration) return null;
 
-    currentHints = Array.isArray(data?.suggestions) ? data.suggestions : [];
-    currentHintTree = data?.hint_tree || null;
-    // lastHintedCode = currentEditorCode;
-    lastHintedCode = submittedCode;
+    workflowState.hints = Array.isArray(data?.suggestions) ? data.suggestions : [];
+    workflowState.hintTree = data?.hint_tree || null;
+    workflowState.hintedCodeSnapshot = submittedCodeSnapshot;
 
     if (!data.hint_tree) {
       const fallbackHint = Array.isArray(data.suggestions)
-        ? data.suggestions.map((s) => s.suggestion || s.general_hint || JSON.stringify(s)).join("\n")
+        ? data.suggestions.map((suggestion) => suggestion.suggestion || suggestion.general_hint || JSON.stringify(suggestion)).join('\n')
         : data.suggestions;
-      showMsg(fallbackHint || "No structured hints available.", msgtype.HINT);
-      console.log("No structured hints:", msgtype.HINT);
+      showFeedbackMessage(fallbackHint || 'No structured hints available.', msgtype.HINT);
       return null;
     }
-
     return data;
-  } catch (err) {
-    showMsg(`Hint error: ${err.message}`, msgtype.FAILURE);
+  } catch (error) {
+    if (generation !== workflowState.hintRequestGeneration) return null;
+    showFeedbackMessage(`Hint error: ${error.message}`, msgtype.FAILURE);
     return null;
   } finally {
-    isGeneratingHints = false;
+    if (generation === workflowState.hintRequestGeneration) workflowState.isGeneratingHints = false;
   }
 }
 
-
-async function handleHints() {
-  clearMessages();
+/** Show existing hints or request new ones. */
+async function handleHintRequest() {
+  const generation = workflowState.hintRequestGeneration;
+  rptView.clearMessages();
   const currentEditorCode = editor.getValue();
 
-  console.log("[handleHints] Invoked");
-  console.log("[handleHints] currentEditorCode:", currentEditorCode);
-  console.log("[handleHints] lastHintedCode:", lastHintedCode);
-
-  // const currentGroup = window.currentUser?.group;
-  // if (currentGroup === "STEP-BASED") {
-  //   showMsg("Step-based hint", msgtype.HINT);
-  //   return;
-  // }
-
-  console.log("[handleHints] Invoked");
-  // If already generating, show spinner message and wait for it to finish
-  if (isGeneratingHints) {
-    console.log("[handleHints] Hints are already generating. Waiting...");
-    await showMsgWithSpinner(
-      "Generating... ",
-      msgtype.HINT,
-      waitForHintsToFinish()
-    );
-    console.log("[handleHints] Finished waiting. Rendering currentHintTree.");
-    renderHintTree(currentHintTree);
+  if (workflowState.isGeneratingHints) {
+    await showMessageWhileAwaiting('Generating... ', msgtype.HINT, waitForHintsToFinish());
+    if (generation !== workflowState.hintRequestGeneration) return;
+    renderCurrentHintTree(workflowState.hintTree);
     return;
   }
 
-  console.log("[handleHints] currentHintTree exists:", !!currentHintTree);
-  console.log("[handleHints] Code matches lastHintedCode:", currentEditorCode.trim() === lastHintedCode.trim());
-
-  // Only reuse a cached hint tree when it was generated from the exact current code snapshot.
-  if (currentHintTree && currentEditorCode.trim() === lastHintedCode.trim()) {
-    console.log("[handleHints] Reusing existing hint tree for the current code snapshot.");
-    lastHintedCode = currentEditorCode;
-    renderHintTree(currentHintTree);
+  if (workflowState.hintTree && currentEditorCode.trim() === workflowState.hintedCodeSnapshot.trim()) {
+    workflowState.hintedCodeSnapshot = currentEditorCode;
+    renderCurrentHintTree(workflowState.hintTree);
     return;
   }
 
-  // clearHints();
-  clearHintDisplay();
-  // document.getElementById("hints").innerHTML = "";
-
-  // Otherwise, generate new hints
-  console.log("[handleHints] No valid hint tree or code changed. Generating new hints...");
-  const data = await showMsgWithSpinner(
-    "Generating... ",
-    msgtype.HINT,
-    generateHints()
-  );
+  rptView.clearHintDisplay();
+  const data = await showMessageWhileAwaiting('Generating... ', msgtype.HINT, requestHintTree());
+  if (generation !== workflowState.hintRequestGeneration) return;
 
   if (data) {
-    console.log("[handleHints] Hints generated successfully:", data);
-    currentHintTree = data.hint_tree;
-    renderHintTree(currentHintTree);
-  } else {
-    console.warn("[handleHints] Hint generation failed or returned null.");
+    workflowState.hintTree = data.hint_tree;
+    renderCurrentHintTree(workflowState.hintTree);
   }
 }
 
-function waitForHintsToFinish(interval = 100) {
-  return new Promise((resolve) => {
-    const check = () => {
-      if (!isGeneratingHints) return resolve();
-      setTimeout(check, interval);
-    };
-    check();
+/** Connect workflow callbacks to the hint renderer. */
+function renderCurrentHintTree(hintTree) {
+  rptView.renderCurrentHintTree(hintTree, {
+    onEmpty: () => showFeedbackMessage('Your code already looks good!', msgtype.CORRECT),
+    onExpandHint: (targetedHint) => recordUserAction('ExpandHint', {
+      code_status: workflowState.diagnosisResult?.status || null,
+      hint_tree: workflowState.hintTree ? JSON.stringify(workflowState.hintTree) : null,
+      feedback: targetedHint,
+    }),
+    onGetCode: (refactoredCode) => recordUserAction('GetCode', {
+      code_status: workflowState.diagnosisResult?.status || null,
+      hint_tree: workflowState.hintTree ? JSON.stringify(workflowState.hintTree) : null,
+      feedback: refactoredCode,
+    }),
   });
 }
 
-
-
-function isNewSubmission() {
-  // return (submittedCode.trim() !== previousCode.trim()) && (submittedCode.trim() !== previousFunctionalCode.trim());
-  return submittedCode.trim() !== cachedDiagnosisCode.trim();
-}
-
-function handleError(message) {
-  showMsg(`Compile Error: ${message}`, msgtype.FAILURE);
-}
-
-async function handleNotEquivalent(data) {
-  // Message about what failed
-  if (data.expected == 'N/A') {
-    showMsg(
-    `Something did not work!`,
-    msgtype.FAILURE
-  );
+/** Render feedback for a change in behavior. */
+async function processNonEquivalentDiagnosis(data) {
+  if (data.expected === 'N/A') {
+    showFeedbackMessage('Something did not work!', msgtype.FAILURE);
+  } else {
+    showFeedbackMessage(`Calling \`${data.call}\` should return \`${data.expected}\`, but it got \`${data.actual}\`.`, msgtype.FAILURE);
   }
-  else {
-    showMsg(
-    `Calling \`${data.call}\` should return \`${data.expected}\`, but it got \`${data.actual}\`.`,
-    msgtype.FAILURE
-  );
-  }
-
-
-  // Spinner + fetch explanation
-  // const feedback = await showMsgWithSpinner(
-  //   "Analyzing error and generating explanation... ",
-  //   msgtype.FAILURE,
-  //   generateNotEquivalentFeedback(data)
-  // );
 
   let feedback = data.notEquivalentFeedback;
-
   if (!feedback) {
-    feedback = await showMsgWithSpinner(
-      "Analyzing error and generating explanation... ",
+    feedback = await showMessageWhileAwaiting(
+      'Analyzing error and generating explanation... ',
       msgtype.FAILURE,
-      generateNotEquivalentFeedback(data)
+      requestNonEquivalentFeedback(data),
     );
-
     data.notEquivalentFeedback = feedback;
   }
 
-  await logUserAction("Diagnose", {
-    previous_code: previousCode,
-    code_status: "notequiv",
+  await recordUserAction('Diagnose', {
+    previous_code: workflowState.previousSubmittedCode,
+    code_status: 'notequiv',
     feedback: feedback?.error_summary || null,
   });
-
-  // Render explanation chip + embedded content
-  const chip = document.createElement("div");
-  chip.className = `chip ${alertClasses[msgtype.FAILURE]}`;
-  chip.style.flexDirection = "column";
-  chip.style.alignItems = "stretch";
-
-  const header = document.createElement("div");
-  header.innerHTML = `<strong>${typeLabels[msgtype.FAILURE]}</strong>Here is what might have gone wrong.`;
-  header.style.marginBottom = "8px";
-  chip.appendChild(header);
-
-  const card = document.createElement("div");
-  card.className = "embedded-card";
-
-  const title = document.createElement("h3");
-  title.textContent = "Explanation";
-  card.appendChild(title);
-
-  const summaryDetails = document.createElement("details");
-  const summarySummary = document.createElement("summary");
-  summarySummary.innerHTML = `<strong>What went wrong</strong>`;
-  summaryDetails.appendChild(summarySummary);
-
-  // const summaryContent = document.createElement("p");
-  // summaryContent.textContent = feedback.error_summary;
-  // summaryDetails.appendChild(summaryContent);
-
-  // Render the Markdown feedback
-  const markdownContainer = renderMarkdownFeedback(feedback.error_summary);
-  summaryDetails.appendChild(markdownContainer);
-  card.appendChild(summaryDetails);
-
-  // const locationDetails = document.createElement("details");
-  // const locationSummary = document.createElement("summary");
-  // locationSummary.innerHTML = `<strong>Where in the code</strong>`;
-  // locationDetails.appendChild(locationSummary);
-
-  // const locationContent = document.createElement("code");
-  // locationContent.textContent = feedback.error_location;
-  // locationDetails.appendChild(locationContent);
-  // card.appendChild(locationDetails);
-
-  chip.appendChild(card);
-
-  document.getElementById("feedbackContainer").appendChild(chip);
-
-  // await showMsgWithSpinner(
-  //   "Generating hints for functionally incorrect code... ",
-  //   msgtype.HINT,
-  //   generateHints()
-  // );
-
-  // previousCode = submittedCode;
-}
-
-
-
-
-function renderCards(items, type, containerId = "refactoringCardContainer") {
-  const container = document.getElementById(containerId);
-  container.innerHTML = "";
-  container.style.display = "flex";
-
-  const formatter = type === "RefactoringStep" ? formatRefactoringStep : formatSuggestedRefactoringWithHints;
-  items.forEach((item, i) => {
-    container.appendChild(createCard(formatter(item, i)));
-  });
-}
-
-function createCard({ title, fields }) {
-  const card = document.createElement("div");
-  card.className = "card";
-
-  if (title) {
-    const heading = document.createElement("h3");
-    heading.textContent = title;
-    card.appendChild(heading);
-  }
-
-  fields.forEach(({ label, value, isCode }) => {
-    if (!value) return;
-    const detail = document.createElement("details");
-    const summary = document.createElement("summary");
-    summary.innerHTML = `<strong>${label}</strong>`;
-    detail.appendChild(summary);
-
-    const content = document.createElement(isCode ? "code" : "p");
-    content.textContent = value;
-    detail.appendChild(content);
-    card.appendChild(detail);
-  });
-
-  return card;
-}
-
-function formatRefactoringStep(step, index) {
-  return {
-    title: `${index + 1}. ${step.title}`,
-    fields: [
-      { label: "Description", value: step.description },
-      { label: "Reason", value: step.reason }
-    ]
-  };
-}
-
-function formatSuggestedRefactoringWithHints(step, index) {
-  return {
-    title: `${index + 1}. ${step.title}`,
-    fields: [
-      { label: "Suggestion", value: step.suggestion },
-      { label: "Reason", value: step.reason },
-      { label: "Target Code", value: step.target_code, isCode: true },
-      { label: "Refactored Code", value: step.refactored_code, isCode: true },
-      { label: "General Hint", value: step.general_hint },
-      { label: "Targeted Hint", value: step.targeted_hint },
-      { label: "Concrete Hint", value: step.concrete_hint },
-    ]
-  };
-}
-
-function renderHintTree(tree) {
-
-  console.log("Hint tree: ", tree);
-
-  clearMessages();
-  const container = document.getElementById("hints");
-  container.innerHTML = "";
-
-  const root = tree.Tree;
-  const children = root[2]; // top-level suggestions
-
-  if (!children || children.length === 0) {
-    showMsg("Your code already looks good!", msgtype.CORRECT);
-    return;
-  }
-
-  children.forEach((node, index) => {
-    const card = document.createElement("div");
-    card.className = "card hint-block";
-    card.style.marginBottom = "1rem";
-
-    const treeData = node.Tree;
-    const meta = treeData[5] || {};
-
-    const generalHint = treeData[0];
-    const targetedHint = treeData[2][0]?.Tree?.[0];
-    const concreteHint = treeData[2][0]?.Tree?.[2]?.[0]?.Tree?.[0];
-    const refactoredCode = meta.refactored_code;
-    const reason = meta.reason;
-
-    let step = 0;
-
-    // General hint (always visible)
-    const hintContent = document.createElement("div");
-    hintContent.innerHTML = `<p><br>${generalHint}</p>`;
-    card.appendChild(hintContent);
-
-    // Hidden elements
-    const targetedEl = document.createElement("p");
-    targetedEl.style.display = "none";
-    targetedEl.innerHTML = `<br>${targetedHint || "No targeted hint available."}`;
-    card.appendChild(targetedEl);
-
-    // const concreteEl = document.createElement("p");
-    // concreteEl.style.display = "none";
-    // concreteEl.innerHTML = `<br>${concreteHint || "No concrete hint available."}`;
-    // card.appendChild(concreteEl);
-
-    const codeBlock = document.createElement("pre");
-    codeBlock.style.display = "none";
-    codeBlock.innerHTML = `<code>${refactoredCode || "// No refactored code available."}</code>`;
-    card.appendChild(codeBlock);
-
-    const reasonEl = document.createElement("p");
-    reasonEl.style.display = "none";
-    reasonEl.innerHTML = `<strong>Reason:</strong><br>${reason || "No reason provided."}`;
-    card.appendChild(reasonEl);
-
-    // Expand button
-    const expandBtn = document.createElement("md-text-button");
-    expandBtn.innerHTML = `Explain more <svg slot="icon" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M450-200v-250H200v-60h250v-250h60v250h250v60H510v250h-60Z"/></svg>`;
-    expandBtn.onclick = async () => {
-      step++;
-      if (step === 1 && targetedHint) {
-        targetedEl.style.display = "block";
-
-        await logUserAction("ExpandHint", {
-          code_status: diagnosis?.status || null,
-          hint_tree: currentHintTree ? JSON.stringify(currentHintTree) : null,
-          feedback: targetedHint
-        });
-
-        expandBtn.innerText = "Get Code";
-      // } else if (step === 2 && concreteHint) {
-      //   concreteEl.style.display = "block";
-      //   expandBtn.innerText = "Get Code";
-      // } else if (step === 3 && refactoredCode) {
-      //   codeBlock.style.display = "block";
-      //   expandBtn.remove();
-      } else if (step === 2 && refactoredCode) {
-        codeBlock.style.display = "block";
-
-        await logUserAction("GetCode", {
-          code_status: diagnosis?.status || null,
-          hint_tree: currentHintTree ? JSON.stringify(currentHintTree) : null,
-          feedback: refactoredCode
-        });
-
-        expandBtn.remove();
-
-        if (reason) {
-          const reasonBtn = document.createElement("md-outlined-button");
-          reasonBtn.textContent = "Get Reason";
-          reasonBtn.onclick = () => {
-            reasonEl.style.display = "block";
-            reasonBtn.remove();
-          };
-          card.appendChild(reasonBtn);
-        }
-
-      } else if (step === 3 && reason) {
-        reasonEl.style.display = "block";
-        expandBtn.remove();
-      } else {
-        expandBtn.remove();
-      }
-    };
-    card.appendChild(expandBtn);
-
-    // // Reason button
-    // const reasonBtn = document.createElement("md-outlined-button");
-    // reasonBtn.textContent = "Get Reason";
-    // reasonBtn.onclick = () => {
-    //   reasonEl.style.display = "block";
-    //   reasonBtn.remove();
-    // };
-    // card.appendChild(reasonBtn);
-
-    container.appendChild(card);
-  });
-
-  // New Hint Button (created dynamically and moved to bottom)
-  const newHintBtn = document.createElement("md-outlined-button");
-  newHintBtn.id = "newhint";
-  newHintBtn.innerHTML = `New Hint <svg slot="icon" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M450-200v-250H200v-60h250v-250h60v250h250v60H510v250h-60Z"/></svg>`;
-  newHintBtn.style.display = "inline-block";
-  newHintBtn.onclick = async () => {
-    const next = document.querySelector(".hint-block:not(.shown)");
-    if (next) {
-      next.classList.add("shown");
-      next.style.display = "block";
-
-      // await logUserAction("DisplayHint", {
-      //   code_status: diagnosis?.status || null,
-      //   hint_tree: JSON.stringify(node),
-      //   feedback: generalHint
-      // });
-    }
-    if (!document.querySelector(".hint-block:not(.shown)")) {
-      newHintBtn.style.display = "none";
-    }
-  };
-  // newHintBtn.onclick = async () => {
-  //   const next = document.querySelector(".hint-block:not(.shown)");
-
-  //   if (next) {
-  //     next.classList.add("shown");
-  //     next.style.display = "block";
-
-  //     const index = Number(next.dataset.hintIndex);
-  //     const node = children[index];
-
-  //     await logUserAction("DisplayHint", {
-  //       code_status: diagnosis?.status || null,
-  //       hint_tree: JSON.stringify(node),
-  //       feedback: generalHint
-  //     });
-  //   }
-
-  //   if (!document.querySelector(".hint-block:not(.shown)")) {
-  //     newHintBtn.style.display = "none";
-  //   }
-  // };
-  container.appendChild(newHintBtn);
-
-  // Show only the first card
-  const cards = document.querySelectorAll(".hint-block");
-  cards.forEach((c, i) => {
-    c.style.display = i === 0 ? "block" : "none";
-    if (i === 0) c.classList.add("shown");
-  });
-  
-}
-
-
-function flattenHintTree(treeRoot) {
-  const result = [];
-
-  function walk(node) {
-    const t = node.Tree;
-    if (!t || t.length < 1) return;
-    result.push(t[0]); // description
-    if (Array.isArray(t[2])) {
-      for (const child of t[2]) {
-        walk(child);
-      }
-    }
-  }
-
-  walk(treeRoot);
-  return result;
-}
-
-function renderEmbeddedCards(steps) {
-  return steps.map((step, i) => {
-    const card = document.createElement("div");
-    card.className = "embedded-card";
-
-    const title = document.createElement("h3");
-    title.textContent = `${i + 1}. ${step.title}`;
-    card.appendChild(title);
-
-    const fields = [
-      { label: "Description", value: step.description },
-      { label: "Reason", value: step.reason }
-    ];
-
-    fields.forEach(({ label, value }) => {
-      if (!value) return;
-
-      const detail = document.createElement("details");
-      const summary = document.createElement("summary");
-      summary.textContent = label;
-      detail.appendChild(summary);
-
-      // const content = document.createElement("p");
-      // content.textContent = value;
-      const markdownContainer = renderMarkdownFeedback(value);
-      detail.appendChild(markdownContainer);
-      // detail.appendChild(content);
-      card.appendChild(detail);
-    });
-
-    return card;
-  });
-}
-
-
-function showMsg(msg, type) {
-  const container = document.getElementById("feedbackContainer");
-  const chip = document.createElement("div");
-  chip.className = `chip ${alertClasses[type]}`;
-  chip.innerHTML = `<strong>${typeLabels[type]}</strong>${msg}`;
-  container.appendChild(chip);
-}
-
-async function showMsgWithSpinner(msg, type, awaitedPromise, options = {}) {
-  const { prepend = false } = options;
-  const container = document.getElementById("feedbackContainer");
-
-  const chip = document.createElement("div");
-  chip.className = `chip ${alertClasses[type]}`;
-  const id = `chip-spinner-${Date.now()}`;
-  chip.id = id;
-
-  const label = document.createElement("strong");
-  label.textContent = `${typeLabels[type]}`;
-  chip.appendChild(label);
-
-  const message = document.createTextNode(`${msg}`);
-  chip.appendChild(message);
-
-  const spinner = document.createElement("div");
-  spinner.className = "inline-spinner";
-  spinner.innerHTML = `
-    <svg width="20" height="20" viewBox="0 0 50 50">
-      <circle cx="25" cy="25" r="20" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"
-        stroke-dasharray="31.4 31.4" transform="rotate(-90 25 25)">
-        <animateTransform attributeName="transform" type="rotate"
-          values="0 25 25;360 25 25" dur="1s" repeatCount="indefinite" />
-      </circle>
-    </svg>
-  `;
-  chip.appendChild(spinner);
-
-  if (prepend) {
-    container.prepend(chip);
-  } else {
-    container.appendChild(chip);
-  }
-
-  try {
-    return await awaitedPromise;
-  } finally {
-    const existing = document.getElementById(id);
-    if (existing) existing.remove();
-  }
-}
-
-
-
-
-function clearMessages() {
-  document.getElementById("feedbackContainer").innerHTML = "";
-  document.getElementById("summaryErrorBox").style.display = "none";
-  document.getElementById("locationErrorBox").style.display = "none";
-}
-
-function clearHintDisplay() {
-  const hintsContainer = document.getElementById("hints");
-  if (hintsContainer) hintsContainer.innerHTML = "";
-}
-
-function resetHintCache() {
-  currentHintTree = null;
-  currentHints = [];
-  lastHintedCode = "";  
-}
-
-function hasCachedDiagnosisForCurrentCode() {
-  return (
-    diagnosis &&
-    typeof diagnosis.status === "string" &&
-    editor.getValue().trim() === lastDiagnosedCode.trim()
+  document.getElementById('feedbackContainer').appendChild(
+    rptView.createNonEquivalentFeedbackChip(
+      feedback,
+      alertClasses[msgtype.FAILURE],
+      typeLabels[msgtype.FAILURE],
+    ),
   );
 }
 
-async function replayCachedDiagnosis() {
-  // if (!hasCachedDiagnosisForCurrentCode()) {
-  //   return false;
-  // }
-  if (!diagnosis || submittedCode.trim() !== cachedDiagnosisCode.trim()) {
-    return false;
-  }
+/** Add a labeled text message. */
+function showFeedbackMessage(message, type) {
+  rptView.appendFeedbackMessage(message, alertClasses[type], typeLabels[type]);
+}
 
-  switch (diagnosis.status) {
-    case "compile_error":
-      handleError(diagnosis.message);
+/** Show a message while an operation completes. */
+function showMessageWhileAwaiting(message, type, promise, options = {}) {
+  return rptView.appendLoadingMessage(
+    message,
+    alertClasses[type],
+    typeLabels[type],
+    promise,
+    options,
+  );
+}
+
+/** Show a compilation error in the feedback area. */
+function showCompileError(message) {
+  showFeedbackMessage(`Compile Error: ${message}`, msgtype.FAILURE);
+}
+
+/** Clear the hint data and its code snapshot. */
+function resetHintState() {
+  workflowState.hintTree = null;
+  workflowState.hints = [];
+  workflowState.hintedCodeSnapshot = '';
+}
+
+/** Check whether the editor still matches the last diagnosis. */
+function hasCachedDiagnosisForCurrentCode() {
+  return Boolean(
+    workflowState.diagnosisResult &&
+    typeof workflowState.diagnosisResult.status === 'string' &&
+    editor.getValue().trim() === workflowState.lastDiagnosedCode.trim()
+  );
+}
+
+/** Show the cached diagnosis for unchanged code. */
+async function replayCachedDiagnosisResult() {
+  if (!workflowState.diagnosisResult || workflowState.submittedCode.trim() !== workflowState.diagnosedCodeSnapshot.trim()) return false;
+  switch (workflowState.diagnosisResult.status) {
+    case 'compile_error':
+      showCompileError(workflowState.diagnosisResult.message);
       return true;
-
-    case "notequiv":
-      await handleNotEquivalent(diagnosis);
+    case 'notequiv':
+      await processNonEquivalentDiagnosis(workflowState.diagnosisResult);
       return true;
-
-    case "correct":
-      await handleCorrect();
+    case 'correct':
+      await processCorrectDiagnosis();
       return true;
-
     default:
       return false;
   }
 }
 
-function showSpinner() {
-  const spinner = document.getElementById("loadingSpinner");
-  if (spinner) spinner.style.display = "inline-block";
-}
-
-function hideSpinner() {
-  const spinner = document.getElementById("loadingSpinner");
-  if (spinner) spinner.style.display = "none";
+/** Check whether the code differs from the last diagnosis. */
+function hasUnprocessedCodeChanges() {
+  return workflowState.submittedCode.trim() !== workflowState.diagnosedCodeSnapshot.trim();
 }
 
 const msgtype = {
@@ -1062,5 +460,5 @@ const msgtype = {
   WARNING: 3,
 };
 
-const alertClasses = ["failure", "hint", "correct", "warning"];
-const typeLabels = ["", "", "", "Warning:"];
+const alertClasses = ['failure', 'hint', 'correct', 'warning'];
+const typeLabels = ['', '', '', 'Warning:'];
