@@ -76,7 +76,8 @@ async function loadExerciseCatalog() {
   workflowState.availableExercises.forEach((exercise) => {
     const option = document.createElement('md-select-option');
     option.value = exercise.id;
-    option.textContent = exercise.id;
+    const languageName = exercise.language === 'csharp' ? 'C#' : 'Java';
+    option.textContent = `${languageName}: ${exercise.id}`;
     if (exercise.id === workflowState.selectedExerciseId) option.setAttribute('selected', 'true');
     select.appendChild(option);
   });
@@ -97,6 +98,7 @@ async function loadExerciseById(exerciseId) {
   const exercise = await rptApi.fetchExerciseById(exerciseId);
   document.getElementById('exname').textContent = `Exercise ${exercise.id}`;
   document.getElementById('exdesc').textContent = exercise.description;
+  editor.session?.setMode(`ace/mode/${exercise.language === 'csharp' ? 'csharp' : 'java'}`);
 
   workflowState.submittedCode = exercise.start_method;
   workflowState.lastKnownFunctionalCode = exercise.start_method;

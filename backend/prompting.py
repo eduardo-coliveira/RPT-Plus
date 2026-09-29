@@ -12,14 +12,14 @@ from mistralai import Mistral
 import instructor
 import os
 from backend.prompts import (
-    error_system_prompt,
-    error_user_prompt,
-    present_rf_system_prompt,
-    present_rf_user_prompt,
-    step_based_error_system_prompt,
-    step_based_error_user_prompt,
-    suggested_rf_system_prompt,
-    suggested_rf_user_prompt,
+    state_based_feedback_system_prompt,
+    state_based_feedback_user_prompt,
+    correct_refactoring_system_prompt,
+    correct_refactoring_user_prompt,
+    step_based_feedback_system_prompt,
+    step_based_feedback_user_prompt,
+    suggest_refactoring_system_prompt,
+    suggest_refactoring_user_prompt,
 )
 from backend.schemas import RefactoringSteps, SimpleError, SuggestedRefactoringsWithHints
 
@@ -64,16 +64,16 @@ class LLMConfig:
 
 
 PROMPT_DEFINITIONS = {
-    "ERROR": PromptDefinition(error_system_prompt, error_user_prompt, SimpleError),
-    "PRESENT": PromptDefinition(present_rf_system_prompt, present_rf_user_prompt, RefactoringSteps),
+    "ERROR": PromptDefinition(state_based_feedback_system_prompt, state_based_feedback_user_prompt, SimpleError),
+    "PRESENT": PromptDefinition(correct_refactoring_system_prompt, correct_refactoring_user_prompt, RefactoringSteps),
     "SUGGESTED": PromptDefinition(
-        suggested_rf_system_prompt,
-        suggested_rf_user_prompt,
+        suggest_refactoring_system_prompt,
+        suggest_refactoring_user_prompt,
         SuggestedRefactoringsWithHints,
     ),
     "STEP_ERROR": PromptDefinition(
-        step_based_error_system_prompt,
-        step_based_error_user_prompt,
+        step_based_feedback_system_prompt,
+        step_based_feedback_user_prompt,
         SimpleError,
     ),
 }
@@ -95,13 +95,14 @@ class StructuredOutputClient:
 
         prompt_template_values = dict(prompt_data)
         prompt_template_values["fields"] = describe_model_fields(definition.response_model)
+        prompt_template_values.setdefault("language", "C#")
 
         token_budget = max_tokens if max_tokens is not None else self.config.max_tokens
 
         completion_arguments = {
             "model": self.config.model,
             "messages": [
-                {"role": "system", "content": definition.system_prompt},
+                {"role": "system", "content": definition.system_prompt.format(**prompt_template_values)},
                 {"role": "user", "content": definition.user_prompt_template.format(**prompt_template_values)},
             ],
             "response_model": definition.response_model,

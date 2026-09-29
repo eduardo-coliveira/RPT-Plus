@@ -24,7 +24,8 @@ def create_app() -> FastAPI:
         app.state.database_config = DatabaseConfig.from_env()
         app.state.active_user_sessions = {}
         app.state.user_lock = RLock()
-        app.state.exercises = exercises.load_exercise_catalog()
+        # app.state.exercises = exercises.load_exercise_catalog()
+        app.state.exercises = exercises.load_exercise_catalog("csharp")
         app.state.llm_config = LLMConfig.from_env()
         app.state.client_wrapper = create_llm_client(app.state.llm_config)
         initialize_database(app.state.database_config)

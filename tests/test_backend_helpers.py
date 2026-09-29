@@ -1,5 +1,11 @@
 from backend.services.feedback import build_hint_tree
-from backend.services.diagnosis import build_java_execution_harness, build_java_test_runner_code, parse_test_result_line
+from backend.services.diagnosis import (
+    build_csharp_execution_harness,
+    build_csharp_test_runner_code,
+    build_java_execution_harness,
+    build_java_test_runner_code,
+    parse_test_result_line,
+)
 
 
 def test_build_java_program_wraps_submission_and_tests():
@@ -30,6 +36,26 @@ def test_generate_test_code_formats_booleans_and_arrays():
         'int result1 = count(new int[]{});\n'
         'System.out.println("TEST_RESULT:1|expected=0|actual=" + result1);'
     )
+
+
+def test_build_csharp_test_runner_formats_arrays_and_result_output():
+    result = build_csharp_test_runner_code(
+        "isReady",
+        [{"inputs": [150], "expected": "true"}, {"inputs": [[1, 2]], "expected": 3}],
+    )
+
+    assert 'isReady(150)' in result
+    assert 'isReady(new int[] { 1, 2 })' in result
+    assert 'expected=true|actual=" +' in result
+    assert "InvariantCulture" in result
+
+
+def test_build_csharp_execution_harness_wraps_submission():
+    result = build_csharp_execution_harness("public static int answer() { return 42; }", "var result = answer();")
+
+    assert "public class Program" in result
+    assert "public static void Main(string[] args)" in result
+    assert "public static int answer()" in result
 
 
 def test_parse_test_output_extracts_fields_and_rejects_invalid_lines():

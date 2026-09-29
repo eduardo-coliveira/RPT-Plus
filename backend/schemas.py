@@ -1,19 +1,26 @@
 """Pydantic models for backend requests and responses."""
 
-from typing import List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, Field
-from typing import List, Dict, Optional
 # Requests
 
 class CodeRequest(BaseModel):
     code: str
+    language: Literal["java", "csharp"] = "csharp"
     
+class ExerciseTest(BaseModel):
+    inputs: List[Any]
+    expected: Any
+
 class Exercise(BaseModel):
     id: str
+    language: Literal["java", "csharp"]
+    parameters: int
     description: str
     start_method: str
     call_method: str
-    tests: List[Dict]
+    result_type: str
+    tests: List[ExerciseTest]
 
 # class DiagnoseRequest(BaseModel):
 #     exercise_id: str

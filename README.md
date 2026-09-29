@@ -27,7 +27,8 @@ Explains why changes in functionality might occur when refactoring.
 
 - **Python** ≥ 3.10
 - **Node.js** ≥ 18 and **npm**
-- **OpenAI API Key** Set as env var `OPENAI_API_KEY`
+- **Mistral API key** set as `MISTRAL_API_KEY`
+- Network access to Judge0 CE for Java and C# execution
 
 ---
 
@@ -39,12 +40,12 @@ Explains why changes in functionality might occur when refactoring.
 # in repo root
 pip install -r requirements.txt
 ```
-#### Add OpenAI API key 
+#### Add Mistral API key
 ```bash
-# export api key
-export OPENAI_API_KEY=<your_key_here>
+# export API key
+export MISTRAL_API_KEY=<your_key_here>
 ```
-or create .env file with your key.
+or create a `.env` file with your key. Java and C# exercises are loaded from `exercise_data/exercises_java.json` and `exercise_data/exercises_csharp.json` respectively.
 
 ### 2) Frontend
 ```bash

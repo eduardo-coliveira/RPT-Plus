@@ -3,11 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const exercises = [
   {
     id: '0.isOvenReady',
+    language: 'java',
     description: 'Check the oven temperature.',
     start_method: 'public static boolean isOvenReady(int temperature) {}',
   },
   {
     id: '1.busTicketPrice',
+    language: 'java',
     description: 'Calculate the ticket price.',
     start_method: 'public static double calculateBusTicketPrice(int age) {}',
   },
@@ -62,6 +64,7 @@ describe('exercise and hint workflows', () => {
       setValue: vi.fn((value) => {
         editorCode = value;
       }),
+      session: { setMode: vi.fn() },
     });
     window.currentUser = { username: 'learner', group: 'group-a' };
 
@@ -95,7 +98,7 @@ describe('exercise and hint workflows', () => {
     const fetchMock = vi.fn(async (url, options = {}) => {
       requests.push({ url, options });
       if (url === '/exercises') {
-        return { json: async () => exerciseData.map(({ id, description }) => ({ id, description })) };
+        return { json: async () => exerciseData.map(({ id, description, language }) => ({ id, description, language })) };
       }
       if (url.startsWith('/exercise/')) {
         const exercise = exerciseData.find(({ id }) => id === url.slice('/exercise/'.length));
@@ -158,6 +161,27 @@ describe('exercise and hint workflows', () => {
       .map(({ options }) => JSON.parse(options.body))
       .find(({ action }) => action === 'NewExercise');
     expect(newExerciseLog.previous_code).toBe(exercises[1].start_method);
+  });
+
+  it('switches the editor mode when a C# exercise is selected', async () => {
+    const csharpExercise = {
+      id: '0.isOvenRead.cs',
+      language: 'csharp',
+      description: 'Check the oven temperature.',
+      start_method: 'public static bool isOvenReady(int temperature) {}',
+    };
+    const { requests } = mockBackend({ exerciseData: [...exercises, csharpExercise] });
+
+    await initializeRefactoringTutor();
+    const selector = document.getElementById('exerciseSelect');
+    selector.value = csharpExercise.id;
+    selector.dispatchEvent(new Event('input', { bubbles: true }));
+
+    await vi.waitFor(() => {
+      expect(editor.session.setMode).toHaveBeenLastCalledWith('ace/mode/csharp');
+      expect(editor.getValue()).toBe(csharpExercise.start_method);
+      expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(2);
+    });
   });
 
   it('restarts the current exercise, resets the editor and diagnosis cache, and logs the restart', async () => {

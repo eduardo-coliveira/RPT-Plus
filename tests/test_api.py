@@ -31,7 +31,7 @@ def test_list_exercises_returns_ids_and_descriptions(client):
 
     assert response.status_code == 200
     assert response.json() == [
-        {"id": exercise["id"], "description": exercise["description"]}
+        {"id": exercise.id, "description": exercise.description, "language": exercise.language}
         for exercise in client.app.state.exercises.values()
     ]
 
@@ -49,7 +49,15 @@ def test_get_exercise_returns_known_exercise(client):
     response = client.get(f"/exercise/{exercise_id}")
 
     assert response.status_code == 200
-    assert response.json() == client.app.state.exercises[exercise_id]
+    assert response.json() == client.app.state.exercises[exercise_id].model_dump()
+
+
+def test_list_exercises_filters_by_language(client):
+    response = client.get("/exercises?language=csharp")
+
+    assert response.status_code == 200
+    assert response.json()
+    assert {exercise["language"] for exercise in response.json()} == {"csharp"}
 
 
 def test_get_exercise_returns_404_for_unknown_id(client):
@@ -183,7 +191,7 @@ def test_run_code_translates_mocked_judge0_response(client, monkeypatch):
     assert response.status_code == 200
     assert response.json() == {
         "language": "java",
-        "version": "17.0.4",
+        "version": "13.0.1",
         "run": {
             "code": 0,
             "signal": None,
@@ -228,7 +236,8 @@ def test_correct_feedback_uses_stubbed_llm(client, monkeypatch):
     assert llm.request_structured_response.call_args.args[1] == {
         "submitted_code": "public static void run() {}",
         "previous_code": "",
-        "method_explanation": client.app.state.exercises[exercise_id]["description"],
+        "method_explanation": client.app.state.exercises[exercise_id].description,
+        "language": "Java",
     }
 
 
@@ -278,8 +287,8 @@ def test_diagnose_accepts_all_matching_test_results_and_sends_generated_program(
     exercise = client.app.state.exercises["0.isOvenReady"]
     submitted_code = "public static boolean isOvenReady(int temperature) { return true; }"
     stdout = "\n".join(
-        f"TEST_RESULT:{index}|expected={test['expected']}|actual={test['expected']}"
-        for index, test in enumerate(exercise["tests"])
+        f"TEST_RESULT:{index}|expected={test.expected}|actual={test.expected}"
+        for index, test in enumerate(exercise.tests)
     )
     judge0_post = _stub_judge0(
         monkeypatch,
@@ -288,7 +297,7 @@ def test_diagnose_accepts_all_matching_test_results_and_sends_generated_program(
 
     response = client.post(
         "/diagnose",
-        json={"exercise_id": exercise["id"], "submitted_code": submitted_code},
+        json={"exercise_id": exercise.id, "submitted_code": submitted_code},
     )
 
     assert response.json() == {"status": "correct"}
@@ -296,14 +305,38 @@ def test_diagnose_accepts_all_matching_test_results_and_sends_generated_program(
         f"{judge0.JUDGE0_URL}?wait=true",
         json={
             "language_id": 62,
-            "source_code": diagnosis.build_java_execution_harness(
-                submitted_code,
-                diagnosis.build_java_test_runner_code(exercise["call_method"], exercise["result_type"], exercise["tests"]),
-            ),
+            "source_code": diagnosis.build_execution_harness(submitted_code, exercise),
             "stdin": "",
             "expected_output": None,
         },
     )
+
+
+def test_run_code_supports_csharp_and_reports_runtime_metadata(client, monkeypatch):
+    judge0_post = _stub_judge0(monkeypatch, {"exit_code": 0, "stdout": "ok", "stderr": ""})
+
+    response = client.post("/run_code", json={"code": "public class Program {}", "language": "csharp"})
+
+    assert response.json()["language"] == "csharp"
+    assert response.json()["version"] == "6.6.0.161"
+    assert judge0_post.call_args.kwargs["json"]["language_id"] == 51
+
+
+def test_diagnose_builds_and_submits_csharp_harness(client, monkeypatch):
+    exercise = next(item for item in client.app.state.exercises.values() if item.language == "csharp")
+    judge0_post = _stub_judge0(monkeypatch, {"status": {"id": 3}, "stdout": "TEST_RESULT:0|expected=false|actual=false"})
+
+    response = client.post(
+        "/diagnose",
+        json={"exercise_id": exercise.id, "submitted_code": exercise.start_method},
+    )
+
+    assert response.json() == {"status": "correct"}
+    submitted = judge0_post.call_args.kwargs["json"]
+    assert submitted["language_id"] == 51
+    assert "public class Program" in submitted["source_code"]
+    assert "public static void Main(string[] args)" in submitted["source_code"]
+    assert "System.Console.WriteLine" in submitted["source_code"]
 
 
 @pytest.mark.parametrize(
@@ -380,7 +413,8 @@ def test_hint_tree_passes_prompt_fields_to_llm_and_returns_tree(client, monkeypa
         {
             "submitted_code": "public static boolean isOvenReady(int temperature) {}",
             "previous_code": "previous version",
-            "method_explanation": client.app.state.exercises[exercise_id]["description"],
+            "method_explanation": client.app.state.exercises[exercise_id].description,
+            "language": "Java",
             "hint_group": "group-a",
         },
     )
@@ -418,7 +452,8 @@ def test_notequiv_feedback_selects_llm_prompt_and_failure_text(
             "previous_code": "previous version",
             "submitted_code": "public static boolean isOvenReady(int temperature) {}",
             "test_case_failure": test_case_failure,
-            "method_explanation": client.app.state.exercises["0.isOvenReady"]["description"],
+            "method_explanation": client.app.state.exercises["0.isOvenReady"].description,
+            "language": "Java",
         },
     )
 

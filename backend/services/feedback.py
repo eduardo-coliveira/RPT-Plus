@@ -2,18 +2,21 @@
 
 from typing import Dict, List
 
+from backend.schemas import Exercise
 
-def build_prompt_context(request_data, exercise: Dict) -> Dict:
+
+def build_prompt_context(request_data, exercise: Exercise) -> Dict:
     """Combine a feedback request with the exercise description."""
 
     return {
         "submitted_code": request_data.submitted_code,
         "previous_code": request_data.previous_code,
-        "method_explanation": exercise["description"],
+        "method_explanation": exercise.description,
+        "language": "C#" if exercise.language == "csharp" else "Java",
     }
 
 
-def generate_non_equivalence_feedback(request_data, exercise: Dict, client_wrapper) -> Dict:
+def generate_non_equivalence_feedback(request_data, exercise: Exercise, client_wrapper) -> Dict:
     """Explain why a refactoring changed behavior."""
 
     test_case_failure = request_data.test_case_failure or "A test failed."

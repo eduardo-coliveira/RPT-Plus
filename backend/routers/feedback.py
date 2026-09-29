@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from backend.routers.exercises import find_exercise_or_404
+from backend.routers.exercises import find_exercise
 from backend.schemas import DiagnoseRequest, HintRequest
 from backend.services.feedback import (
     build_prompt_context,
@@ -18,7 +18,7 @@ router = APIRouter()
 async def generate_hint_tree(request_data: HintRequest, request: Request):
     """Generate hints for the submitted code and exercise."""
 
-    exercise = find_exercise_or_404(request_data.exercise_id, request.app.state.exercises)
+    exercise = find_exercise(request_data.exercise_id, request.app.state.exercises)
 
     try:
         prompt_data = build_prompt_context(request_data, exercise)
@@ -39,7 +39,7 @@ async def generate_hint_tree(request_data: HintRequest, request: Request):
 async def generate_refactoring_feedback(request_data: DiagnoseRequest, request: Request):
     """Generate refactoring feedback for submitted code."""
 
-    exercise = find_exercise_or_404(request_data.exercise_id, request.app.state.exercises)
+    exercise = find_exercise(request_data.exercise_id, request.app.state.exercises)
 
     try:
         prompt_data = build_prompt_context(request_data, exercise)
@@ -57,7 +57,7 @@ async def generate_refactoring_feedback(request_data: DiagnoseRequest, request: 
 async def generate_non_equivalence_feedback_response(request_data: DiagnoseRequest, request: Request):
     """Explain why a submission changed behavior."""
 
-    exercise = find_exercise_or_404(request_data.exercise_id, request.app.state.exercises)
+    exercise = find_exercise(request_data.exercise_id, request.app.state.exercises)
 
     try:
         return generate_non_equivalence_feedback(request_data, exercise, request.app.state.client_wrapper)

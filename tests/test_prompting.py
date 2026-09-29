@@ -37,6 +37,45 @@ def test_call_renders_prompt_without_mutating_input_data():
     assert "return true;" in call_args["messages"][1]["content"]
     assert "return false;" in call_args["messages"][1]["content"]
     assert "present_refactorings" in call_args["messages"][1]["content"]
+    assert "Java method" in call_args["messages"][1]["content"]
+
+
+def test_call_renders_csharp_language_in_prompt():
+    create = Mock(return_value=object())
+    wrapper = StructuredOutputClient(
+        make_client(create),
+        LLMConfig(api_key="test-key", model="test-model"),
+    )
+
+    wrapper.request_structured_response(
+        "PRESENT",
+        {"language": "C#", "previous_code": "", "submitted_code": ""},
+    )
+
+    assert "C# method" in create.call_args.kwargs["messages"][0]["content"]
+
+
+@pytest.mark.parametrize("prompt_type", ["ERROR", "PRESENT", "SUGGESTED", "STEP_ERROR"])
+def test_all_prompt_types_render_with_language_and_code_context(prompt_type):
+    create = Mock(return_value=object())
+    wrapper = StructuredOutputClient(
+        make_client(create),
+        LLMConfig(api_key="test-key", model="test-model"),
+    )
+
+    wrapper.request_structured_response(
+        prompt_type,
+        {
+            "language": "C#",
+            "previous_code": "return true;",
+            "submitted_code": "return false;",
+            "method_explanation": "Checks a condition.",
+            "test_case_failure": "Expected true.",
+        },
+    )
+
+    if prompt_type != "ERROR":
+        assert "C#" in create.call_args.kwargs["messages"][0]["content"] or "C#" in create.call_args.kwargs["messages"][1]["content"]
 
 
 def test_call_rejects_unknown_prompt_type_without_calling_client():
