@@ -31,26 +31,64 @@ export function createNonEquivalentFeedbackChip(feedback, alertClass, typeLabel)
   const chip = createFeedbackChip(
     alertClass,
     typeLabel,
-    'Here is what might have gone wrong.',
+    //'Here is what might have gone wrong.',
+    ' ',
   );
 
-  const card = document.createElement('div');
-  card.className = 'embedded-card';
-  const title = document.createElement('h3');
-  title.textContent = 'Explanation';
-  card.appendChild(title);
-
-  const summaryDetails = document.createElement('details');
-  const summary = document.createElement('summary');
-  const summaryLabel = document.createElement('strong');
-  summaryLabel.textContent = 'What went wrong';
-  summary.appendChild(summaryLabel);
-  summaryDetails.appendChild(summary);
-  summaryDetails.appendChild(renderSanitizedMarkdown(feedback.error_summary));
-  card.appendChild(summaryDetails);
-  chip.appendChild(card);
+  appendProse(chip, feedback.summary);
+  const codePair = document.createElement('div');
+  codePair.className = 'code-compare';
+  appendCodeSection(codePair, 'Previous correct code', feedback.previous_code);
+  appendCodeSection(codePair, 'Incorrect current code', feedback.incorrect_code);
+  if (codePair.children.length) chip.appendChild(codePair);
+  appendProse(chip, feedback.explanation);
+  appendProse(chip, feedback.failed_test);
+  appendProse(chip, feedback.fix_suggestion);
 
   return chip;
+}
+
+/** Render one untitled prose field from step-based feedback. */
+function appendProse(container, value) {
+  if (!value) return;
+  const prose = renderSanitizedMarkdown(value);
+  // prose.classList.add('feedback-prose');
+  prose.className = 'feedback-prose';
+  container.appendChild(prose);
+}
+
+/** Render one structured code field in its own block. */
+function appendCodeSection(container, label, value) {
+  if (!value) return;
+  const section = document.createElement('div');
+  const heading = document.createElement('strong');
+  heading.textContent = label;
+  section.appendChild(heading);
+  const codeBlock = document.createElement('pre');
+  const code = document.createElement('code');
+  code.textContent = dedentCode(value);
+  codeBlock.appendChild(code);
+  section.appendChild(codeBlock);
+  container.appendChild(section);
+}
+
+/** Strip blank edge lines, trailing spaces, and indentation shared by all lines. */
+function dedentCode(text) {
+  const lines = text.replace(/\t/g, '    ').split('\n').map((line) => line.trimEnd());
+  while (lines.length && !lines[0]) lines.shift();
+  while (lines.length && !lines[lines.length - 1]) lines.pop();
+  const indentOf = (line) => line.match(/^ */)[0].length;
+  const rest = lines.slice(1).filter(Boolean);
+  const restMin = rest.length ? Math.min(...rest.map(indentOf)) : 0;
+  const last = lines[lines.length - 1] || '';
+  // Generated snippets often strip the first line only; its closing brace shows the true offset.
+  if (lines.length > 1 && /^\s*[}\])]/.test(last) && indentOf(last) === restMin && restMin > indentOf(lines[0])) {
+    const first = lines[0].trimStart();
+    return [first, ...lines.slice(1).map((line) => line.slice(restMin))].join('\n');
+  }
+  const indents = lines.filter(Boolean).map(indentOf);
+  const common = indents.length ? Math.min(...indents) : 0;
+  return lines.map((line) => line.slice(common)).join('\n');
 }
 
 /** Build the shared container and heading for a feedback chip. */

@@ -316,6 +316,52 @@ main .exercise p {
   line-height: 1.6;
 }
 
+.code-compare {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 6px 0;
+}
+
+.code-compare > div {
+  min-width: 0;
+  font-size: 12px;
+}
+
+.code-compare pre {
+  margin: 2px 0 0;
+  padding: 4px 6px;
+  overflow: visible;
+  font-family: 'Roboto Mono', monospace;
+  font-size: 11px;
+  line-height: 1.35;
+  background-color: var(--md-sys-color-surface-container-high);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: 5px;
+}
+
+.code-compare code {
+  display: block;
+  overflow: visible;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.feedback-prose {
+  margin: 6px 0;
+  line-height: 1.5;
+}
+
+.feedback-prose p {
+  margin: 0 0 6px;
+}
+
+@media (max-width: 700px) {
+  .code-compare {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Feedback container styling */
 .feedback-markdown {
   font-family: 'Roboto', sans-serif;

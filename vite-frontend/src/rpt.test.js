@@ -90,7 +90,7 @@ describe('exercise and hint workflows', () => {
       refactor_steps: [],
       general_feedback: 'No structural changes were found.',
     },
-    notEquivalentFeedback = { error_summary: 'The change alters behavior.' },
+    notEquivalentFeedback = { summary: 'The change alters behavior.' },
   } = {}) {
     const requests = [];
     const diagnosisResponses = diagnoses ?? [diagnosis];
@@ -346,9 +346,9 @@ describe('exercise and hint workflows', () => {
     document.getElementById('runBtn').click();
 
     await vi.waitFor(() => {
-      expect(document.getElementById('feedbackContainer').textContent).toContain(
-        'Calling `isOvenReady(150)` should return `true`, but it got `false`.',
-      );
+      // expect(document.getElementById('feedbackContainer').textContent).toContain(
+      //   'Calling `isOvenReady(150)` should return `true`, but it got `false`.',
+      // );
       expect(document.getElementById('feedbackContainer').textContent).toContain(
         'The change alters behavior.',
       );
@@ -365,8 +365,50 @@ describe('exercise and hint workflows', () => {
     expect(loggedAction).toMatchObject({
       action: 'Diagnose',
       code_status: 'notequiv',
-      feedback: 'The change alters behavior.',
+      feedback: JSON.stringify({ summary: 'The change alters behavior.' }),
     });
+  });
+
+  it('renders structured step feedback without showing its classification', async () => {
+    const structuredFeedback = {
+      classification: 'Refactoring misconception',
+      summary: 'The refactoring removed the else behavior.',
+      explanation: 'The refactoring removed the else behavior.',
+      previous_code: 'if (condition) {} else {}',
+      incorrect_code: 'if (condition) {}',
+      failed_test: 'The false condition now skips the required behavior.',
+      fix_suggestion: 'Preserve both branches when simplifying the condition.',
+    };
+    const { requests } = mockBackend({
+      diagnoses: [
+        { status: 'correct' },
+        {
+          status: 'notequiv',
+          call: 'isOvenReady(150)',
+          expected: 'true',
+          actual: 'false',
+          reason: 'Expected true, got false',
+        },
+      ],
+      notEquivalentFeedback: structuredFeedback,
+    });
+
+    await initializeRefactoringTutor();
+    editor.setValue('changed code');
+    document.getElementById('runBtn').click();
+
+    await vi.waitFor(() => {
+      const feedback = document.getElementById('feedbackContainer');
+      expect(feedback.textContent).toContain(structuredFeedback.summary);
+      expect(feedback.textContent).toContain(structuredFeedback.failed_test);
+      expect(feedback.textContent).toContain(structuredFeedback.fix_suggestion);
+      expect(feedback.textContent).not.toContain(structuredFeedback.classification);
+      expect(feedback.querySelectorAll('pre code')).toHaveLength(2);
+      expect(feedback.querySelectorAll('pre code')[0].textContent).toBe(structuredFeedback.previous_code);
+      expect(feedback.querySelectorAll('pre code')[1].textContent).toBe(structuredFeedback.incorrect_code);
+    });
+
+    expect(requests.some(({ url }) => url === '/notequiv_feedback')).toBe(true);
   });
 
   it('renders refactoring feedback for behavior-preserving code', async () => {
@@ -559,15 +601,15 @@ describe('exercise and hint workflows', () => {
           reason: 'Values differ',
         },
       ],
-      notEquivalentFeedback: { error_summary: hostileFeedback },
+      notEquivalentFeedback: { summary: hostileFeedback },
     });
 
     await initializeRefactoringTutor();
     editor.setValue('changed code');
     document.getElementById('runBtn').click();
-    await vi.waitFor(() => expect(document.querySelector('.feedback-markdown')).not.toBeNull());
+    await vi.waitFor(() => expect(document.querySelector('.feedback-prose')).not.toBeNull());
 
-    const markdown = document.querySelector('.feedback-markdown');
+    const markdown = document.querySelector('.feedback-prose');
     expect(markdown.querySelectorAll('script, iframe, [onerror], [onload]')).toHaveLength(0);
     expect(markdown.querySelector('strong')?.textContent).toBe('Safe feedback');
   });

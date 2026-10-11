@@ -67,13 +67,38 @@ class PromptRequest(BaseModel):
 
 # LLM responses
 class SimpleError(BaseModel):
-    error_summary: str = Field(
-        description="Explanation of the mistake that was introduced."
+    summary: str = Field(
+        # description="A summary of the problem with the program's behavior."
     )
-    # error_location: str = Field(
-    # error_location: Optional[str] = Field(
-    #     description="Where the error occurs in the code (e.g., a short snippet of issue)."
+    incorrect_code: str = Field(
+        # description="Only the relevant incorrect code from the current version. Do not include prose or code fences."
+    )
+    failed_test: str = Field(
+        # description="A failed test case demonstrating the difference between expected and actual behavior. Do not include code."
+    )
+    fix_suggestion: str = Field(
+        # description="How to fix the error in no more than two sentences. Do not refer to specific code elements."
+    )
+
+class StepErrorFeedback(BaseModel):
+    summary: str = Field(
+        # description="A summary of what went wrong in the refactoring step."
+    )   
+    incorrect_code: str = Field(
+        # description="Only the relevant incorrect code from the current version. Do not include prose or code fences."
+    )
+    previous_code: str = Field(
+        # description="Only the equivalent code from the latest correct version. Do not include prose or code fences."
+    )
+    explanation: str = Field(
+        # description="A short explanation of the incorrect refactoring step, without code."
+    )
+    # failed_test: str = Field(
+        # description="One short sentence explaining how the supplied test failure relates to the incorrect code."
     # )
+    fix_suggestion: str = Field(
+        # description="A short conceptual fix using a logical rule when possible. Do not include code."
+    )
     
 class RefactoringStep(BaseModel):
     title: str = Field(

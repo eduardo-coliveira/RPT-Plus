@@ -21,7 +21,7 @@ from backend.prompts import (
     suggest_refactoring_system_prompt,
     suggest_refactoring_user_prompt,
 )
-from backend.schemas import RefactoringSteps, SimpleError, SuggestedRefactoringsWithHints
+from backend.schemas import RefactoringSteps, SimpleError, StepErrorFeedback, SuggestedRefactoringsWithHints
 
 
 @dataclass(frozen=True)
@@ -39,7 +39,8 @@ class LLMConfig:
 
     api_key: str = field(repr=False)
     model: str
-    max_tokens: int = 1000
+    # max_tokens: int = 1000
+    max_tokens: int = 4000
 
     @classmethod
     def from_env(cls) -> "LLMConfig":
@@ -50,7 +51,7 @@ class LLMConfig:
             raise ValueError("MISTRAL_API_KEY is required")
 
         try:
-            max_tokens = int(os.getenv("LLM_MAX_TOKENS", "1000"))
+            max_tokens = int(os.getenv("LLM_MAX_TOKENS", "4000"))
         except ValueError as error:
             raise ValueError("LLM_MAX_TOKENS must be an integer") from error
         if max_tokens <= 0:
@@ -59,6 +60,8 @@ class LLMConfig:
         return cls(
             api_key=api_key,
             model=os.getenv("MISTRAL_MODEL", "mistral-large-2512"),
+            # model=os.getenv("MISTRAL_MODEL", "mistral-large-4-0"),
+            # model=os.getenv("MISTRAL_MODEL", "zai-glm-5-3"),
             max_tokens=max_tokens,
         )
 
@@ -74,7 +77,7 @@ PROMPT_DEFINITIONS = {
     "STEP_ERROR": PromptDefinition(
         step_based_feedback_system_prompt,
         step_based_feedback_user_prompt,
-        SimpleError,
+        StepErrorFeedback,
     ),
 }
 

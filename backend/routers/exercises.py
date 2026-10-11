@@ -10,7 +10,8 @@ from backend.schemas import Exercise
 router = APIRouter()
 EXERCISE_PATHS = {
     "java": Path(__file__).resolve().parents[2] / "exercise_data" / "exercises_java.json",
-    "csharp": Path(__file__).resolve().parents[2] / "exercise_data" / "exercises_csharp.json",
+    # "csharp": Path(__file__).resolve().parents[2] / "exercise_data" / "exercises_csharp.json",
+    "csharp": Path(__file__).resolve().parents[2] / "exercise_data" / "exercises_original_rpt_csharp.json",
 }
 
 

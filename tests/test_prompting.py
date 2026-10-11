@@ -37,7 +37,7 @@ def test_call_renders_prompt_without_mutating_input_data():
     assert "return true;" in call_args["messages"][1]["content"]
     assert "return false;" in call_args["messages"][1]["content"]
     assert "present_refactorings" in call_args["messages"][1]["content"]
-    assert "Java method" in call_args["messages"][1]["content"]
+    assert "C# method" in call_args["messages"][1]["content"]
 
 
 def test_call_renders_csharp_language_in_prompt():

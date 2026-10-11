@@ -22,9 +22,12 @@ def generate_non_equivalence_feedback(request_data, exercise: Exercise, client_w
     test_case_failure = request_data.test_case_failure or "A test failed."
     prompt_data = build_prompt_context(request_data, exercise)
     prompt_data["test_case_failure"] = test_case_failure
-    prompt_type = "ERROR" if request_data.hint_group == "STATE-BASED" else "STEP_ERROR"
+    if request_data.hint_group == "STATE-BASED":
+        prompt_type = "ERROR"
+    else:
+        prompt_type = "STEP_ERROR"
     response = client_wrapper.request_structured_response(prompt_type, prompt_data)
-    return {"error_summary": response.error_summary}
+    return response.model_dump()
 
 
 def build_hint_tree(suggestions: List[Dict]) -> Dict:

@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from backend import app as api
 from backend.routers import actions, auth, exercises
 from backend.services import diagnosis, judge0
-from backend.schemas import SuggestedRefactoringWithHints
+from backend.schemas import SimpleError, StepErrorFeedback, SuggestedRefactoringWithHints
 
 
 def test_exercise_loader_works_from_a_different_working_directory(monkeypatch, tmp_path):
@@ -24,6 +24,10 @@ def _stub_judge0(monkeypatch, result=None, error=None):
     judge0_post = Mock(side_effect=error) if error is not None else Mock(return_value=judge0_response)
     monkeypatch.setattr(judge0.requests, "post", judge0_post)
     return judge0_post
+
+
+def _first_exercise(client):
+    return next(iter(client.app.state.exercises.values()))
 
 
 def test_list_exercises_returns_ids_and_descriptions(client):
@@ -190,8 +194,8 @@ def test_run_code_translates_mocked_judge0_response(client, monkeypatch):
 
     assert response.status_code == 200
     assert response.json() == {
-        "language": "java",
-        "version": "13.0.1",
+        "language": "csharp",
+        "version": "6.6.0.161",
         "run": {
             "code": 0,
             "signal": None,
@@ -202,7 +206,7 @@ def test_run_code_translates_mocked_judge0_response(client, monkeypatch):
     judge0_post.assert_called_once_with(
         f"{judge0.JUDGE0_URL}?wait=true",
         json={
-            "language_id": 62,
+            "language_id": 51,
             "source_code": "public class Main {}",
             "stdin": "",
             "expected_output": None,
@@ -237,7 +241,7 @@ def test_correct_feedback_uses_stubbed_llm(client, monkeypatch):
         "submitted_code": "public static void run() {}",
         "previous_code": "",
         "method_explanation": client.app.state.exercises[exercise_id].description,
-        "language": "Java",
+        "language": "C#",
     }
 
 
@@ -253,7 +257,7 @@ def test_diagnose_reports_compile_errors_from_judge0(client, monkeypatch):
 
     response = client.post(
         "/diagnose",
-        json={"exercise_id": "0.isOvenReady", "submitted_code": "public class Main {}"},
+        json={"exercise_id": _first_exercise(client).id, "submitted_code": "public class Program {}"},
     )
 
     assert response.status_code == 200
@@ -261,6 +265,7 @@ def test_diagnose_reports_compile_errors_from_judge0(client, monkeypatch):
 
 
 def test_diagnose_reports_the_first_failing_test(client, monkeypatch):
+    exercise = _first_exercise(client)
     _stub_judge0(
         monkeypatch,
         {
@@ -271,12 +276,12 @@ def test_diagnose_reports_the_first_failing_test(client, monkeypatch):
 
     response = client.post(
         "/diagnose",
-        json={"exercise_id": "0.isOvenReady", "submitted_code": "public class Main {}"},
+        json={"exercise_id": _first_exercise(client).id, "submitted_code": "public class Program {}"},
     )
 
     assert response.json() == {
         "status": "notequiv",
-        "call": "isOvenReady(-1)",
+            "call": f'{exercise.call_method}({", ".join(map(str, exercise.tests[0].inputs))})',
         "expected": "false",
         "actual": "true",
         "reason": "Expected false, got true",
@@ -284,8 +289,8 @@ def test_diagnose_reports_the_first_failing_test(client, monkeypatch):
 
 
 def test_diagnose_accepts_all_matching_test_results_and_sends_generated_program(client, monkeypatch):
-    exercise = client.app.state.exercises["0.isOvenReady"]
-    submitted_code = "public static boolean isOvenReady(int temperature) { return true; }"
+    exercise = _first_exercise(client)
+    submitted_code = "public static bool isOvenReady(int temperature) { return true; }"
     stdout = "\n".join(
         f"TEST_RESULT:{index}|expected={test.expected}|actual={test.expected}"
         for index, test in enumerate(exercise.tests)
@@ -304,7 +309,7 @@ def test_diagnose_accepts_all_matching_test_results_and_sends_generated_program(
     judge0_post.assert_called_once_with(
         f"{judge0.JUDGE0_URL}?wait=true",
         json={
-            "language_id": 62,
+            "language_id": 51,
             "source_code": diagnosis.build_execution_harness(submitted_code, exercise),
             "stdin": "",
             "expected_output": None,
@@ -352,7 +357,7 @@ def test_diagnose_reports_unusable_test_output(client, monkeypatch, stdout):
 
     response = client.post(
         "/diagnose",
-        json={"exercise_id": "0.isOvenReady", "submitted_code": "public class Main {}"},
+        json={"exercise_id": _first_exercise(client).id, "submitted_code": "public class Program {}"},
     )
 
     assert response.json() == {
@@ -368,14 +373,14 @@ def test_diagnose_returns_error_when_judge0_request_fails(client, monkeypatch):
 
     response = client.post(
         "/diagnose",
-        json={"exercise_id": "0.isOvenReady", "submitted_code": "public class Main {}"},
+        json={"exercise_id": _first_exercise(client).id, "submitted_code": "public class Program {}"},
     )
 
     assert response.json() == {"status": "error", "message": "Judge0 unavailable"}
 
 
 def test_hint_tree_passes_prompt_fields_to_llm_and_returns_tree(client, monkeypatch):
-    exercise_id = "0.isOvenReady"
+    exercise_id = _first_exercise(client).id
     suggestion = SuggestedRefactoringWithHints(
         title="Use a range check",
         suggestion="Express the boundaries directly.",
@@ -393,7 +398,7 @@ def test_hint_tree_passes_prompt_fields_to_llm_and_returns_tree(client, monkeypa
         "/hint_tree",
         json={
             "exercise_id": exercise_id,
-            "submitted_code": "public static boolean isOvenReady(int temperature) {}",
+            "submitted_code": "public static bool isOvenReady(int temperature) {}",
             "previous_code": "previous version",
             "hint_group": "group-a",
             "code_diagnosis": "correct",
@@ -411,10 +416,10 @@ def test_hint_tree_passes_prompt_fields_to_llm_and_returns_tree(client, monkeypa
     llm.request_structured_response.assert_called_once_with(
         "SUGGESTED",
         {
-            "submitted_code": "public static boolean isOvenReady(int temperature) {}",
+            "submitted_code": "public static bool isOvenReady(int temperature) {}",
             "previous_code": "previous version",
             "method_explanation": client.app.state.exercises[exercise_id].description,
-            "language": "Java",
+            "language": "C#",
             "hint_group": "group-a",
         },
     )
@@ -431,11 +436,26 @@ def test_notequiv_feedback_selects_llm_prompt_and_failure_text(
     client, monkeypatch, hint_group, prompt_type, test_case_failure
 ):
     llm = Mock()
-    llm.request_structured_response.return_value = SimpleNamespace(error_summary="The change alters behavior.")
+    if prompt_type == "STEP_ERROR":
+        llm.request_structured_response.return_value = StepErrorFeedback(
+            classification="Refactoring misconception",
+            incorrect_code="if (condition1 && condition2) {}",
+            previous_code="if (condition1) {} else {}",
+            explanation="The else branch was lost.",
+            failed_test="The false condition skips the required branch.",
+            fix_suggestion="Preserve the else behavior when simplifying the conditions.",
+        )
+    else:
+        llm.request_structured_response.return_value = SimpleError(
+            classification="Refactoring misconception",
+            incorrect_code="if (condition1 && condition2) {}",
+            failed_test="The false condition skips the required branch.",
+            fix_suggestion="Preserve the else behavior when simplifying the conditions.",
+        )
     monkeypatch.setattr(client.app.state, "client_wrapper", llm)
     payload = {
-        "exercise_id": "0.isOvenReady",
-        "submitted_code": "public static boolean isOvenReady(int temperature) {}",
+        "exercise_id": _first_exercise(client).id,
+        "submitted_code": "public static bool isOvenReady(int temperature) {}",
         "previous_code": "previous version",
         "hint_group": hint_group,
     }
@@ -445,15 +465,17 @@ def test_notequiv_feedback_selects_llm_prompt_and_failure_text(
     response = client.post("/notequiv_feedback", json=payload)
 
     assert response.status_code == 200
-    assert response.json() == {"error_summary": "The change alters behavior."}
+    assert response.json()["classification"] == "Refactoring misconception"
+    assert response.json()["incorrect_code"] == "if (condition1 && condition2) {}"
+    assert ("explanation" in response.json()) == (prompt_type == "STEP_ERROR")
     llm.request_structured_response.assert_called_once_with(
         prompt_type,
         {
             "previous_code": "previous version",
-            "submitted_code": "public static boolean isOvenReady(int temperature) {}",
+            "submitted_code": "public static bool isOvenReady(int temperature) {}",
             "test_case_failure": test_case_failure,
-            "method_explanation": client.app.state.exercises["0.isOvenReady"].description,
-            "language": "Java",
+            "method_explanation": _first_exercise(client).description,
+            "language": "C#",
         },
     )
 
@@ -465,7 +487,7 @@ def test_hint_tree_returns_server_error_when_llm_fails(client, monkeypatch):
 
     response = client.post(
         "/hint_tree",
-        json={"exercise_id": "0.isOvenReady", "submitted_code": "code", "hint_group": "group-a"},
+        json={"exercise_id": _first_exercise(client).id, "submitted_code": "code", "hint_group": "group-a"},
     )
 
     assert response.status_code == 500

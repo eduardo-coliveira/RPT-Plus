@@ -368,7 +368,7 @@ async function processNonEquivalentDiagnosis(data) {
   if (data.expected === 'N/A') {
     showFeedbackMessage('Something did not work!', msgtype.FAILURE);
   } else {
-    showFeedbackMessage(`Calling \`${data.call}\` should return \`${data.expected}\`, but it got \`${data.actual}\`.`, msgtype.FAILURE);
+    // showFeedbackMessage(`Calling \`${data.call}\` should return \`${data.expected}\`, but it got \`${data.actual}\`.`, msgtype.FAILURE);
   }
 
   let feedback = data.notEquivalentFeedback;
@@ -384,7 +384,7 @@ async function processNonEquivalentDiagnosis(data) {
   await recordUserAction('Diagnose', {
     previous_code: workflowState.previousSubmittedCode,
     code_status: 'notequiv',
-    feedback: feedback?.error_summary || null,
+    feedback: feedback?.error_summary || JSON.stringify(feedback) || null,
   });
   document.getElementById('feedbackContainer').appendChild(
     rptView.createNonEquivalentFeedbackChip(
