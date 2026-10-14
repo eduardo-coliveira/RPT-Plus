@@ -27,7 +27,7 @@ export function createRefactoringFeedbackChip(steps, typeLabel, alertClass) {
 }
 
 /** Build a feedback chip that explains a behavior change. */
-export function createNonEquivalentFeedbackChip(feedback, alertClass, typeLabel) {
+export function createNonEquivalentFeedbackChip(feedback, alertClass, typeLabel, onSeeFixSuggestion) {
   const chip = createFeedbackChip(
     alertClass,
     typeLabel,
@@ -43,7 +43,16 @@ export function createNonEquivalentFeedbackChip(feedback, alertClass, typeLabel)
   if (codePair.children.length) chip.appendChild(codePair);
   appendProse(chip, feedback.explanation);
   appendProse(chip, feedback.failed_test);
-  appendProse(chip, feedback.fix_suggestion);
+  if (feedback.fix_suggestion) {
+    const fixSuggestionButton = document.createElement('md-text-button');
+    fixSuggestionButton.innerHTML = `See fix suggestion <svg slot="icon" xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M450-200v-250H200v-60h250v-250h60v250h250v60H510v250h-60Z"/></svg>`;
+    fixSuggestionButton.onclick = () => {
+      fixSuggestionButton.remove();
+      appendProse(chip, feedback.fix_suggestion);
+      onSeeFixSuggestion?.();
+    };
+    chip.appendChild(fixSuggestionButton);
+  }
 
   return chip;
 }

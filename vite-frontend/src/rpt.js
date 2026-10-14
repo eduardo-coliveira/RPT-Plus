@@ -391,6 +391,10 @@ async function processNonEquivalentDiagnosis(data) {
       feedback,
       alertClasses[msgtype.FAILURE],
       typeLabels[msgtype.FAILURE],
+      () => recordUserAction('SeeFixSuggestion', {
+        code_status: 'notequiv',
+        feedback: feedback.fix_suggestion,
+      }),
     ),
   );
 }

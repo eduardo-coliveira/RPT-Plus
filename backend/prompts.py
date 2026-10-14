@@ -112,11 +112,12 @@ In the examples below, each field is marked with a tag such as <summary> or <exp
 Use the content under each tag as a reference for each field. The tags are labels for the examples only, do not include them in your response.
 
 *** START OF FEEDBACK EXAMPLE 1 ***
+
 <summary>
 You merged the nested if statements using an AND operator (&&).
 
-Previous correct code:
 <previous_code>
+Previous correct code:
 ```
 if (condition1) {{
     if (condition2) {{
@@ -127,8 +128,8 @@ if (condition1) {{
 }}
 ```
 
-Current incorrect code:
 <incorrect_code>
+Current incorrect code:
 ```
 if (condition1 && condition2) {{
     // statement X
@@ -141,9 +142,11 @@ Your new condition does not account for the case where condition1 is false.
 
 <fix_suggestion>
 To merge the if statements, you can apply the rule: '(A and B) or not A' is the same as 'not A or B'.
+
 *** END OF FEEDBACK EXAMPLE 1 ***
 
 *** START OF FEEDBACK EXAMPLE 2 ***
+
 <summary>
 You negated the expressions in the if statement but kept the OR operator (||).
 
@@ -173,9 +176,11 @@ Compare the code snippets. Your new expression always evaluates to true, which m
 <fix_suggestion>
 When negating the logic of the if-else statement, you need to negate the whole expression in the if branch.
 To negate the if condition, you can apply the rule: the negation of 'A or B' is the same as 'not A and not B'.
+
 *** END OF FEEDBACK EXAMPLE 2 ***
 
 *** START OF FEEDBACK EXAMPLE 3 ***
+
 <summary>
 You updated the condition in the while loop with an expression that does not enter the loop.
 
@@ -203,6 +208,7 @@ Compare the code snippets. You use the same condition that exits the loop as the
 
 <fix_suggestion>
 When replacing a loop with a break statement by a conditional while loop, the loop condition must be the negation of the break condition.
+
 *** END OF FEEDBACK EXAMPLE 3 ***
 
 Here are other examples of refactoring errors that may appear. They are provided as additional references for identifying refactoring errors, not as an exhaustive list.
@@ -310,10 +316,15 @@ Use the given {method_explanation}, {test_case_failure}, and identify the releva
 If the failure details are insufficient, say so briefly in failed_test instead of inventing details.
 
 Use the feedback examples below as references in terms of content, phrasing and length of each feedback field.
+In the examples below, each field is marked with a tag such as <summary> or <fix_suggestion>.
+Use the content under each tag as a reference for each field. The tags are labels for the examples only, do not include them in your response.
 
 *** START OF FEEDBACK EXAMPLE 1 ***
+
+<summary>
 Your condition does not apply the EUR 5.00 discount in situations where it should.
 
+<incorrect_code>
 Current incorrect code:
 ```
 if (onlineOrder && price > 100.00) {{
@@ -321,15 +332,21 @@ if (onlineOrder && price > 100.00) {{
 }}
 ```
 
+<failed_test>
 Read the problem description and consider this case as an example: a physical order of EUR 60.00 was placed. Physical orders should receive a EUR 5.00 discount regardless of price.
 However, in your code physical orders do not get the EUR 5.00 discount.
 
+<fix_suggestion>
 Rewrite the expression to apply the discount when it is a physical order or when the price is above EUR 100.00.
+
 *** END OF FEEDBACK EXAMPLE 1 ***
 
 *** START OF FEEDBACK EXAMPLE 2 ***
+
+<summary>
 Your method charges the full ticket price also in situations where it should return the reduced price.
 
+<incorrect_code>
 Current incorrect code:
 ```
 if (age > 12 || age < 65) {{
@@ -337,15 +354,21 @@ if (age > 12 || age < 65) {{
 }}
 ```
 
+<failed_test>
 Read the problem description and consider this case as an example: a passenger is 11 years old, so they are under 12. Children under 12 should pay the reduced price of EUR 3.00.
 However, in your code children are charged EUR 5.00.
 
+<fix_suggestion>
 Rewrite the expression to charge the full price when the passenger is at least 12 years old but younger than 65.
+
 *** END OF FEEDBACK EXAMPLE 2 ***
 
 *** START OF FEEDBACK EXAMPLE 3 ***
+
+<summary>
 Your while loop condition only executes when the battery level has reached or exceeded 100%.
 
+<incorrect_code>
 Current incorrect code:
 ```
 while (batteryLevel >= fullChargeLevel) {{
@@ -353,10 +376,13 @@ while (batteryLevel >= fullChargeLevel) {{
 }}
 ```
 
+<failed_test>
 Read the problem description and consider this case as an example: a battery level at 50% is not fully charged yet, so it should enter the while loop to charge the battery.
 However, in your code the battery is not charged.
 
+<fix_suggestion>
 Rewrite the expression to charge the battery when its level is below 100%.
+
 *** END OF FEEDBACK EXAMPLE 3 ***
 
 Here are other examples of errors that may appear. They are provided as additional references for identifying errors, not as an exhaustive list.

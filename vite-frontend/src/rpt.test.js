@@ -401,14 +401,30 @@ describe('exercise and hint workflows', () => {
       const feedback = document.getElementById('feedbackContainer');
       expect(feedback.textContent).toContain(structuredFeedback.summary);
       expect(feedback.textContent).toContain(structuredFeedback.failed_test);
-      expect(feedback.textContent).toContain(structuredFeedback.fix_suggestion);
+      expect(feedback.textContent).not.toContain(structuredFeedback.fix_suggestion);
+      expect(feedback.querySelector('md-text-button').textContent).toContain('See fix suggestion');
       expect(feedback.textContent).not.toContain(structuredFeedback.classification);
       expect(feedback.querySelectorAll('pre code')).toHaveLength(2);
       expect(feedback.querySelectorAll('pre code')[0].textContent).toBe(structuredFeedback.previous_code);
       expect(feedback.querySelectorAll('pre code')[1].textContent).toBe(structuredFeedback.incorrect_code);
     });
 
+    document.querySelector('#feedbackContainer md-text-button').click();
+    expect(document.getElementById('feedbackContainer').textContent).toContain(
+      structuredFeedback.fix_suggestion,
+    );
+    expect(document.querySelector('#feedbackContainer md-text-button')).toBeNull();
     expect(requests.some(({ url }) => url === '/notequiv_feedback')).toBe(true);
+    await vi.waitFor(() => {
+      const loggedActions = requests
+        .filter(({ url }) => url === '/log_action')
+        .map(({ options }) => JSON.parse(options.body));
+      expect(loggedActions.at(-1)).toMatchObject({
+        action: 'SeeFixSuggestion',
+        code_status: 'notequiv',
+        feedback: structuredFeedback.fix_suggestion,
+      });
+    });
   });
 
   it('renders refactoring feedback for behavior-preserving code', async () => {

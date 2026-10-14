@@ -20,6 +20,7 @@ def generate_non_equivalence_feedback(request_data, exercise: Exercise, client_w
     """Explain why a refactoring changed behavior."""
 
     test_case_failure = request_data.test_case_failure or "A test failed."
+    print(test_case_failure)
     prompt_data = build_prompt_context(request_data, exercise)
     prompt_data["test_case_failure"] = test_case_failure
     if request_data.hint_group == "STATE-BASED":

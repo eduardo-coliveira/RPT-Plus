@@ -157,7 +157,8 @@ def interpret_execution_result(judge_result: Dict, exercise: Exercise) -> Dict:
                     "call": f'{exercise.call_method}({", ".join(map(str, inputs))})',
                     "expected": match["expected"],
                     "actual": match["actual"],
-                    "reason": f"Expected {match['expected']}, got {match['actual']}",
+                    # "reason": f"Expected {match['expected']}, got {match['actual']}",
+                    "reason": f"{exercise.call_method}({", ".join(map(str, inputs))}) expected {match['expected']}, got {match['actual']}"
                 }
 
     if not test_results_found:
