@@ -1,6 +1,7 @@
 /** Helpers for calling the refactoring tutor API. */
 
-const apiBaseUrl = "";
+// const apiBaseUrl = "";
+const apiBaseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 /** Fetch and decode a JSON response. */
 async function getJsonResponse(path) {

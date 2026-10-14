@@ -1,4 +1,5 @@
 /** Handle login and session cleanup for the application. */
+const apiBaseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 /** Show the application after login. */
 function showAuthenticatedApp() {
@@ -36,7 +37,8 @@ async function submitLogin(event) {
   button.textContent = "Signing in...";
 
   try {
-    const response = await fetch("/login", {
+    // const response = await fetch("/login", {
+    const response = await fetch(`${apiBaseUrl}/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password }),
@@ -76,8 +78,9 @@ export function initializeLogin() {
       const blob = new Blob(
         [JSON.stringify({ username: loggedInUser })],
         { type: 'application/json' }
-      );
-      navigator.sendBeacon('/logout', blob);
+      );   
+      // navigator.sendBeacon('/logout', blob);
+      navigator.sendBeacon(`${apiBaseUrl}/logout`, blob);
     }
   });
 
