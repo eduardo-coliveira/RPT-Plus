@@ -53,6 +53,7 @@ async function submitLogin(event) {
     const user = await response.json();
     window.currentUser = user;
     sessionStorage.setItem('loggedInUser', user.username);
+    sessionStorage.setItem('loggedInSessionToken', user.session_token);
     document.getElementById("loginOverlay").style.display = "none";
     showAuthenticatedApp();
 
@@ -74,9 +75,10 @@ export function initializeLogin() {
 
   window.addEventListener('beforeunload', () => {
     const loggedInUser = sessionStorage.getItem('loggedInUser');
-    if (loggedInUser) {
+    const sessionToken = sessionStorage.getItem('loggedInSessionToken');
+    if (loggedInUser && sessionToken) {
       const blob = new Blob(
-        [JSON.stringify({ username: loggedInUser })],
+        [JSON.stringify({ username: loggedInUser, session_token: sessionToken })],
         { type: 'application/json' }
       );   
       // navigator.sendBeacon('/logout', blob);

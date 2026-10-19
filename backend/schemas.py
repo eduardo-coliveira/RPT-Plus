@@ -50,6 +50,7 @@ class LoginRequest(BaseModel):
 
 class LogoutRequest(BaseModel):
     username: str
+    session_token: str
     
 class ActionLogRequest(BaseModel):
     username: str

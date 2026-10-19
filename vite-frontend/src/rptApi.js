@@ -11,9 +11,13 @@ async function getJsonResponse(path) {
 
 /** Send a JSON payload and decode the response. */
 async function postJsonResponse(path, payload) {
+  const sessionToken = sessionStorage.getItem('loggedInSessionToken');
   const response = await fetch(`${apiBaseUrl}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(sessionToken ? { "X-Session-Token": sessionToken } : {}),
+    },
     body: JSON.stringify(payload),
   });
   return response.json();

@@ -13,6 +13,9 @@ from backend.database import DatabaseConfig, initialize_database
 from backend.prompting import LLMConfig, create_llm_client
 from backend.routers import actions, auth, code_submissions, exercises, feedback, static
 
+URL_PREFIX = "/rpt-plus"
+
+
 def create_app() -> FastAPI:
     """Create the application and register its routes."""
 
@@ -23,6 +26,7 @@ def create_app() -> FastAPI:
         load_dotenv()
         app.state.database_config = DatabaseConfig.from_env()
         app.state.active_user_sessions = {}
+        app.state.authenticated_sessions = {}
         app.state.user_lock = RLock()
         # app.state.exercises = exercises.load_exercise_catalog()
         app.state.exercises = exercises.load_exercise_catalog("csharp")
@@ -39,18 +43,24 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    app.mount(
-        "/assets",
-        StaticFiles(directory=os.path.join(static.DIST_DIR, "assets")),
-        name="assets",
-    )
+    assets = StaticFiles(directory=os.path.join(static.DIST_DIR, "assets"))
+    app.mount("/assets", assets, name="assets")
+    # The build uses the /rpt-plus/ base path, so serve the assets there too.
+    app.mount(f"{URL_PREFIX}/assets", assets, name="prefixed_assets")
 
-    for route_module in (auth, exercises, code_submissions, feedback, actions, static):
+    # for route_module in (auth, exercises, code_submissions, feedback, actions, static):
+    #     app.include_router(route_module.router)
+
+    api_modules = (auth, exercises, code_submissions, feedback, actions)
+    for route_module in api_modules:
         app.include_router(route_module.router)
+        # app.include_router(route_module.router, prefix=URL_PREFIX, include_in_schema=False)
+        app.include_router(route_module.router, prefix=URL_PREFIX)
+    # The catch-all must come last; it also covers /rpt-plus/ and its sub-paths.
+    app.include_router(static.router)
 
     return app
 
 
 app = create_app()
-
 

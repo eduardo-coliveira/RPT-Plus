@@ -1,3 +1,5 @@
+import time
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -5,7 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend import app as api
-from backend.routers import actions, auth, exercises
+from backend.routers import actions, auth, exercises, static
 from backend.services import diagnosis, judge0
 from backend.schemas import SimpleError, StepErrorFeedback, SuggestedRefactoringWithHints
 
@@ -108,9 +110,72 @@ def test_login_claims_session_and_rejects_duplicate_login(client, monkeypatch):
     duplicate_response = client.post("/login", json=payload)
 
     assert first_response.status_code == 200
-    assert first_response.json() == {"username": "learner", "group": "group-a"}
+    assert first_response.json()["username"] == "learner"
+    assert first_response.json()["group"] == "group-a"
+    assert first_response.json()["session_token"]
     assert duplicate_response.status_code == 409
     assert duplicate_response.json() == {"detail": "This user is already logged in elsewhere."}
+
+
+def test_special_user_can_have_multiple_concurrent_sessions(client, monkeypatch):
+    authenticator = Mock(side_effect=AssertionError("Special login must not query the database"))
+    monkeypatch.setattr(auth, "authenticate_user_credentials", authenticator)
+    payload = {"username": auth.SPECIAL_USERNAME, "password": auth.SPECIAL_PASSWORD}
+
+    first_response = client.post("/login", json=payload)
+    second_response = client.post("/login", json=payload)
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert first_response.json()["username"] == auth.SPECIAL_USERNAME
+    assert first_response.json()["group"] == "STATE-BASED"
+    assert first_response.json()["session_token"] != second_response.json()["session_token"]
+    assert client.app.state.active_user_sessions == {}
+    assert len(client.app.state.authenticated_sessions) == 2
+    authenticator.assert_not_called()
+
+
+def test_special_user_rejects_incorrect_password(client, monkeypatch):
+    authenticator = Mock(side_effect=AssertionError("Special login must not query the database"))
+    monkeypatch.setattr(auth, "authenticate_user_credentials", authenticator)
+
+    response = client.post("/login", json={"username": auth.SPECIAL_USERNAME, "password": "wrong"})
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Invalid username or password"}
+    authenticator.assert_not_called()
+
+
+def test_prefixed_assets_are_served_as_static_files_not_html(client):
+    assets_dir = Path(static.DIST_DIR) / "assets"
+    asset = next((p for p in assets_dir.glob("*.js")), None) if assets_dir.is_dir() else None
+    if asset is None:
+        pytest.skip("Frontend is not built")
+
+    prefixed = client.get(f"/rpt-plus/assets/{asset.name}")
+    plain = client.get(f"/assets/{asset.name}")
+
+    assert prefixed.status_code == 200
+    assert "javascript" in prefixed.headers["content-type"]
+    assert prefixed.content == plain.content
+
+
+def test_prefixed_api_routes_match_unprefixed_routes(client, monkeypatch):
+    log_entry = Mock(return_value=True)
+    monkeypatch.setattr(actions, "record_action_log", log_entry)
+
+    login_response = client.post("/rpt-plus/login", json={"username": "st000", "password": "000000"})
+    token = login_response.json()["session_token"]
+    action_response = client.post(
+        "/rpt-plus/log_action",
+        json={"username": "st000", "exercise": "0.isOvenReady", "current_code": "code", "action": "Diagnose"},
+        headers={"X-Session-Token": token},
+    )
+
+    assert login_response.status_code == 200
+    assert action_response.status_code == 200
+    assert client.get("/rpt-plus/exercises").json() == client.get("/exercises").json()
+    log_entry.assert_not_called()
 
 
 def test_login_sessions_are_isolated_between_app_instances(client, monkeypatch):
@@ -131,14 +196,20 @@ def test_login_sessions_are_isolated_between_app_instances(client, monkeypatch):
     assert second_app.state.active_user_sessions == {"learner": next(iter(second_app.state.active_user_sessions.values()))}
 
 
-def test_logout_removes_active_session(client):
-    client.app.state.active_user_sessions["learner"] = 1.0
+def test_logout_removes_only_the_matching_active_session(client):
+    response = client.post("/login", json={"username": "st000", "password": "000000"})
+    token = response.json()["session_token"]
+    client.app.state.authenticated_sessions["other-token"] = ("st000", time.time())
 
-    response = client.post("/logout", json={"username": "learner"})
+    logout_response = client.post(
+        "/logout",
+        json={"username": "st000", "session_token": token},
+    )
 
-    assert response.status_code == 200
-    assert response.json() == {"message": "User learner logged out"}
-    assert "learner" not in client.app.state.active_user_sessions
+    assert logout_response.status_code == 200
+    assert logout_response.json() == {"message": "User st000 logged out"}
+    assert token not in client.app.state.authenticated_sessions
+    assert "other-token" in client.app.state.authenticated_sessions
 
 
 def test_log_action_returns_ok_when_database_write_succeeds(client, monkeypatch):
@@ -154,8 +225,15 @@ def test_log_action_returns_ok_when_database_write_succeeds(client, monkeypatch)
         "feedback": "Looks good",
         "hint_tree": '{"Tree": []}',
     }
+    created_at = time.time()
+    client.app.state.active_user_sessions["learner"] = created_at
+    client.app.state.authenticated_sessions["learner-token"] = ("learner", created_at)
 
-    response = client.post("/log_action", json=payload)
+    response = client.post(
+        "/log_action",
+        json=payload,
+        headers={"X-Session-Token": "learner-token"},
+    )
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
@@ -164,6 +242,9 @@ def test_log_action_returns_ok_when_database_write_succeeds(client, monkeypatch)
 
 def test_log_action_returns_500_when_database_write_fails(client, monkeypatch):
     monkeypatch.setattr(actions, "record_action_log", Mock(return_value=False))
+    created_at = time.time()
+    client.app.state.active_user_sessions["learner"] = created_at
+    client.app.state.authenticated_sessions["learner-token"] = ("learner", created_at)
 
     response = client.post(
         "/log_action",
@@ -173,10 +254,67 @@ def test_log_action_returns_500_when_database_write_fails(client, monkeypatch):
             "current_code": "code",
             "action": "Diagnose",
         },
+        headers={"X-Session-Token": "learner-token"},
     )
 
     assert response.status_code == 500
     assert response.json() == {"detail": "Failed to log action"}
+
+
+def test_special_user_action_is_not_logged(client, monkeypatch):
+    log_entry = Mock()
+    monkeypatch.setattr(actions, "record_action_log", log_entry)
+    login_response = client.post("/login", json={"username": "st000", "password": "000000"})
+
+    response = client.post(
+        "/log_action",
+        json={
+            "username": "st000",
+            "exercise": "0.isOvenReady",
+            "current_code": "return true;",
+            "action": "Diagnose",
+        },
+        headers={"X-Session-Token": login_response.json()["session_token"]},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+    log_entry.assert_not_called()
+
+
+def test_log_action_requires_a_valid_session_and_rejects_identity_spoofing(client, monkeypatch):
+    log_entry = Mock(return_value=True)
+    monkeypatch.setattr(actions, "record_action_log", log_entry)
+    monkeypatch.setattr(
+        auth,
+        "authenticate_user_credentials",
+        lambda username, password, config: {"username": username, "group_name": "group-a"},
+    )
+    missing_session_response = client.post(
+        "/log_action",
+        json={
+            "username": "st000",
+            "exercise": "0.isOvenReady",
+            "current_code": "code",
+            "action": "Diagnose",
+        },
+    )
+
+    login_response = client.post("/login", json={"username": "learner", "password": "correct"})
+    mismatch_response = client.post(
+        "/log_action",
+        json={
+            "username": "st000",
+            "exercise": "0.isOvenReady",
+            "current_code": "code",
+            "action": "Diagnose",
+        },
+        headers={"X-Session-Token": login_response.json()["session_token"]},
+    )
+
+    assert missing_session_response.status_code == 401
+    assert mismatch_response.status_code == 403
+    log_entry.assert_not_called()
 
 
 def test_run_code_translates_mocked_judge0_response(client, monkeypatch):

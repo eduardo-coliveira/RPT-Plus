@@ -45,7 +45,7 @@ describe('login form', () => {
   it('stores the user and opens the app after a successful login', async () => {
     fetch.mockResolvedValue({
       ok: true,
-      json: async () => ({ username: 'learner', group: 'group-a' }),
+      json: async () => ({ username: 'learner', group: 'group-a', session_token: 'session-token' }),
     });
     document.getElementById('loginUsername').value = ' learner ';
     document.getElementById('loginPassword').value = 'secret';
@@ -54,12 +54,13 @@ describe('login form', () => {
 
     await vi.waitFor(() => expect(window.startApp).toHaveBeenCalledOnce());
 
-    expect(fetch).toHaveBeenCalledWith('/login', {
+    expect(fetch).toHaveBeenCalledWith('/rpt-plus/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username: 'learner', password: 'secret' }),
     });
     expect(sessionStorage.getItem('loggedInUser')).toBe('learner');
+    expect(sessionStorage.getItem('loggedInSessionToken')).toBe('session-token');
     expect(document.getElementById('loginOverlay').style.display).toBe('none');
     expect(document.querySelector('nav').style.display).toBe('');
     expect(document.querySelector('main').style.display).toBe('');
@@ -90,6 +91,7 @@ describe('login form', () => {
 
   it('sends a logout beacon for the stored user on page unload', () => {
     sessionStorage.setItem('loggedInUser', 'learner');
+    sessionStorage.setItem('loggedInSessionToken', 'session-token');
     const sendBeacon = vi.fn();
     vi.stubGlobal('navigator', { sendBeacon });
     vi.stubGlobal('Blob', class TestBlob {
@@ -102,8 +104,8 @@ describe('login form', () => {
     beforeUnloadHandlers.at(-1)(new Event('beforeunload'));
 
     expect(sendBeacon).toHaveBeenCalledOnce();
-    expect(sendBeacon).toHaveBeenCalledWith('/logout', {
-      parts: ['{"username":"learner"}'],
+    expect(sendBeacon).toHaveBeenCalledWith('/rpt-plus/logout', {
+      parts: ['{"username":"learner","session_token":"session-token"}'],
       type: 'application/json',
     });
   });
