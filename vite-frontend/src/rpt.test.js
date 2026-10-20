@@ -369,6 +369,267 @@ describe('exercise and hint workflows', () => {
     });
   });
 
+  it('logs the previous and last correct code across consecutive submissions', async () => {
+    const notEquivalent = { status: 'notequiv', reason: 'Expected true, got false' };
+    const code1 = 'code1';
+    const code2 = 'code2';
+    const { requests } = mockBackend({
+      diagnoses: [{ status: 'correct' }, notEquivalent, { status: 'correct' }],
+    });
+    const loggedActions = () =>
+      requests.filter(({ url }) => url === '/log_action').map(({ options }) => JSON.parse(options.body));
+
+    await initializeRefactoringTutor();
+    editor.setValue(code1);
+    document.getElementById('runBtn').click();
+    await vi.waitFor(() => expect(loggedActions()).toHaveLength(1));
+
+    editor.setValue(code2);
+    document.getElementById('runBtn').click();
+    await vi.waitFor(() => expect(loggedActions()).toHaveLength(2));
+
+    expect(loggedActions()[0]).toMatchObject({
+      code_status: 'notequiv',
+      current_code: code1,
+      previous_code: exercises[0].start_method,
+      last_correct_code: exercises[0].start_method,
+    });
+    expect(loggedActions()[1]).toMatchObject({
+      code_status: 'correct',
+      current_code: code2,
+      previous_code: code1,
+      last_correct_code: exercises[0].start_method,
+    });
+
+    document.getElementById('gethinttree').click();
+    await vi.waitFor(() => expect(loggedActions()).toHaveLength(3));
+    expect(loggedActions()[2]).toMatchObject({
+      action: 'GetHint',
+      current_code: code2,
+      previous_code: code1,
+      last_correct_code: code2,
+    });
+  });
+
+  it('sends the last correct code, not the last attempt, to the LLM feedback and omits it elsewhere', async () => {
+    const notEquivalent = () => ({ status: 'notequiv', reason: 'Expected true, got false' });
+    const { requests } = mockBackend({ diagnoses: [{ status: 'correct' }, notEquivalent(), notEquivalent()] });
+    const bodies = (url) => requests.filter((request) => request.url === url).map(({ options }) => JSON.parse(options.body));
+
+    await initializeRefactoringTutor();
+    editor.setValue('notequiv1');
+    document.getElementById('runBtn').click();
+    await vi.waitFor(() => expect(bodies('/notequiv_feedback')).toHaveLength(1));
+    editor.setValue('notequiv2');
+    document.getElementById('runBtn').click();
+    await vi.waitFor(() => expect(bodies('/notequiv_feedback')).toHaveLength(2));
+
+    expect(bodies('/notequiv_feedback').map(({ previous_code }) => previous_code)).toEqual([
+      exercises[0].start_method,
+      exercises[0].start_method,
+    ]);
+    bodies('/diagnose').forEach((body) => expect(body).not.toHaveProperty('previous_code'));
+  });
+
+  it('does not send previous code with hint requests', async () => {
+    const { requests } = mockBackend();
+
+    await initializeRefactoringTutor();
+    document.getElementById('gethinttree').click();
+    await vi.waitFor(() => expect(document.querySelectorAll('.hint-block')).toHaveLength(2));
+
+    const hintBody = JSON.parse(requests.find(({ url }) => url === '/hint_tree').options.body);
+    expect(hintBody).not.toHaveProperty('previous_code');
+  });
+
+  describe('hint requests on edited code', () => {
+    const bodies = (requests, url) =>
+      requests.filter((request) => request.url === url).map(({ options }) => JSON.parse(options.body));
+    const logs = (requests) => bodies(requests, '/log_action');
+
+    it('diagnoses the editor code and withholds hints when edited code is not equivalent', async () => {
+      const { requests } = mockBackend({
+        diagnoses: [{ status: 'correct' }, { status: 'correct' }, { status: 'notequiv', reason: 'Wrong result' }],
+      });
+
+      await initializeRefactoringTutor();
+      editor.setValue('code1');
+      document.getElementById('runBtn').click();
+      await vi.waitFor(() => expect(logs(requests)).toHaveLength(1));
+
+      editor.setValue('code2');
+      document.getElementById('gethinttree').click();
+      await vi.waitFor(() => expect(document.getElementById('feedbackContainer').textContent).toContain('You need to fix code functionality'));
+
+      expect(bodies(requests, '/diagnose').at(-1).submitted_code).toBe('code2');
+      expect(requests.some(({ url }) => url === '/hint_tree')).toBe(false);
+      document.getElementById('gethinttree').click();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(logs(requests)).toHaveLength(1);
+    });
+
+    it('gives hints for edited code that is now equivalent and sends that code for hints', async () => {
+      const { requests } = mockBackend({
+        diagnoses: [{ status: 'correct' }, { status: 'notequiv', reason: 'Wrong result' }, { status: 'correct' }],
+      });
+
+      await initializeRefactoringTutor();
+      editor.setValue('code1');
+      document.getElementById('runBtn').click();
+      await vi.waitFor(() => expect(logs(requests)).toHaveLength(1));
+
+      editor.setValue('code2');
+      document.getElementById('gethinttree').click();
+      await vi.waitFor(() => expect(document.querySelectorAll('.hint-block')).toHaveLength(2));
+
+      expect(bodies(requests, '/hint_tree')[0].submitted_code).toBe('code2');
+    });
+
+    it('does not request a second hint tree for unchanged code, and keeps submission state separate', async () => {
+      const { requests } = mockBackend({
+        diagnoses: [{ status: 'correct' }, { status: 'correct' }, { status: 'correct' }],
+      });
+
+      await initializeRefactoringTutor();
+      editor.setValue('code1');
+      document.getElementById('gethinttree').click();
+      await vi.waitFor(() => expect(logs(requests)).toHaveLength(1));
+
+      document.getElementById('gethinttree').click();
+      await vi.waitFor(() => expect(document.querySelectorAll('.hint-block').length).toBeGreaterThan(0));
+      expect(bodies(requests, '/hint_tree')).toHaveLength(1);
+      expect(bodies(requests, '/diagnose')).toHaveLength(2);
+
+      document.getElementById('runBtn').click();
+      await vi.waitFor(() => expect(logs(requests)).toHaveLength(2));
+      expect(bodies(requests, '/diagnose')).toHaveLength(3);
+      expect(bodies(requests, '/diagnose').at(-1).submitted_code).toBe('code1');
+      expect(document.getElementById('feedbackContainer').textContent).not.toContain("You haven't changed the code.");
+    });
+
+    it('logs follow-up hint actions with the context of the hint request that built the tree', async () => {
+      const { requests } = mockBackend({ diagnoses: [{ status: 'correct' }, { status: 'correct' }] });
+
+      await initializeRefactoringTutor();
+      editor.setValue('code1');
+      document.getElementById('gethinttree').click();
+      await vi.waitFor(() => expect(document.querySelectorAll('.hint-block')).toHaveLength(2));
+      await vi.waitFor(() => expect(logs(requests)).toHaveLength(1));
+
+      editor.setValue('edited after the hint');
+      document.querySelector('.hint-block md-text-button').click();
+      await vi.waitFor(() => expect(logs(requests)).toHaveLength(2));
+
+      const [getHint, expandHint] = logs(requests);
+      expect(expandHint).toMatchObject({
+        action: 'ExpandHint',
+        current_code: getHint.current_code,
+        previous_code: getHint.previous_code,
+        last_correct_code: getHint.last_correct_code,
+        code_status: 'correct',
+      });
+    });
+
+    it('logs the previous code of a hint as the latest submission when the code was edited after it', async () => {
+      const { requests } = mockBackend({ diagnoses: [{ status: 'correct' }, { status: 'correct' }, { status: 'correct' }] });
+
+      await initializeRefactoringTutor();
+      editor.setValue('code1');
+      document.getElementById('runBtn').click();
+      await vi.waitFor(() => expect(logs(requests)).toHaveLength(1));
+
+      editor.setValue('code2');
+      document.getElementById('gethinttree').click();
+      await vi.waitFor(() => expect(logs(requests)).toHaveLength(2));
+      expect(logs(requests)[1]).toMatchObject({ action: 'GetHint', current_code: 'code2', previous_code: 'code1' });
+    });
+
+    it('logs the fix suggestion only once for a replayed diagnosis', async () => {
+      const { requests } = mockBackend({
+        diagnoses: [{ status: 'correct' }, { status: 'notequiv', reason: 'Wrong result' }],
+        notEquivalentFeedback: { error_summary: 'Broken', fix_suggestion: 'Fix it', incorrect_code: 'x', previous_code: 'y' },
+      });
+      const seeFix = () => document.querySelector('#feedbackContainer md-text-button');
+
+      await initializeRefactoringTutor();
+      editor.setValue('code1');
+      document.getElementById('runBtn').click();
+      await vi.waitFor(() => expect(seeFix()).not.toBeNull());
+      seeFix().click();
+      await vi.waitFor(() => expect(logs(requests)).toHaveLength(2));
+
+      document.getElementById('runBtn').click();
+      await vi.waitFor(() => expect(seeFix()).not.toBeNull());
+      seeFix().click();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(logs(requests).filter(({ action }) => action === 'SeeFixSuggestion')).toHaveLength(1);
+    });
+
+    it('logs the fix suggestion with the context of the diagnosis that produced it', async () => {
+      const { requests } = mockBackend({
+        diagnoses: [{ status: 'correct' }, { status: 'notequiv', reason: 'Wrong result' }],
+        notEquivalentFeedback: { error_summary: 'Broken', fix_suggestion: 'Fix it', incorrect_code: 'x', previous_code: 'y' },
+      });
+
+      await initializeRefactoringTutor();
+      editor.setValue('code1');
+      document.getElementById('runBtn').click();
+      await vi.waitFor(() => expect(document.querySelector('#feedbackContainer md-text-button')).not.toBeNull());
+
+      editor.setValue('edited after the diagnosis');
+      document.querySelector('#feedbackContainer md-text-button').click();
+      await vi.waitFor(() => expect(logs(requests)).toHaveLength(2));
+
+      const [diagnose, seeFix] = logs(requests);
+      expect(seeFix).toMatchObject({
+        action: 'SeeFixSuggestion',
+        current_code: diagnose.current_code,
+        previous_code: diagnose.previous_code,
+        last_correct_code: diagnose.last_correct_code,
+      });
+    });
+  });
+
+  it('diagnoses and logs identical code again after a restart', async () => {
+    const notEquivalent = () => ({ status: 'notequiv', reason: 'Wrong result' });
+    const { requests } = mockBackend({
+      diagnoses: [{ status: 'correct' }, notEquivalent(), { status: 'correct' }, notEquivalent()],
+    });
+    const diagnoseLogs = () =>
+      requests.filter(({ url }) => url === '/log_action').filter(({ options }) => JSON.parse(options.body).action === 'Diagnose');
+
+    await initializeRefactoringTutor();
+    editor.setValue('code1');
+    document.getElementById('runBtn').click();
+    await vi.waitFor(() => expect(diagnoseLogs()).toHaveLength(1));
+
+    document.getElementById('loadex').click();
+    await vi.waitFor(() => expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(3));
+    editor.setValue('code1');
+    document.getElementById('runBtn').click();
+    await vi.waitFor(() => expect(diagnoseLogs()).toHaveLength(2));
+  });
+
+  it('does not log a repeated diagnosis of unchanged non-equivalent code', async () => {
+    const { requests } = mockBackend({
+      diagnoses: [{ status: 'correct' }, { status: 'notequiv', reason: 'Expected true, got false' }],
+    });
+    const diagnoseLogs = () =>
+      requests.filter(({ url }) => url === '/log_action').filter(({ options }) => JSON.parse(options.body).action === 'Diagnose');
+
+    await initializeRefactoringTutor();
+    editor.setValue('changed code');
+    document.getElementById('runBtn').click();
+    await vi.waitFor(() => expect(diagnoseLogs()).toHaveLength(1));
+
+    document.getElementById('runBtn').click();
+    await vi.waitFor(() =>
+      expect(requests.filter(({ url }) => url === '/notequiv_feedback')).toHaveLength(1),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(diagnoseLogs()).toHaveLength(1);
+  });
+
   it('renders structured step feedback without showing its classification', async () => {
     const structuredFeedback = {
       classification: 'Refactoring misconception',
@@ -423,6 +684,9 @@ describe('exercise and hint workflows', () => {
         action: 'SeeFixSuggestion',
         code_status: 'notequiv',
         feedback: structuredFeedback.fix_suggestion,
+        current_code: 'changed code',
+        previous_code: exercises[0].start_method,
+        last_correct_code: exercises[0].start_method,
       });
     });
   });

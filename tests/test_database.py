@@ -182,6 +182,7 @@ def test_record_action_log_inserts_for_known_user_and_commits(fake_db):
         code_status="correct",
         feedback="Looks good",
         hint_tree='{"Tree": []}',
+        last_correct_code="return true && true;",
         config=config,
     )
 
@@ -198,6 +199,7 @@ def test_record_action_log_inserts_for_known_user_and_commits(fake_db):
         "correct",
         "Looks good",
         '{"Tree": []}',
+        "return true && true;",
     )
     timestamp = datetime.fromisoformat(insert_values[0])
     assert timestamp.tzinfo is not None

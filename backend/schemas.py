@@ -61,6 +61,7 @@ class ActionLogRequest(BaseModel):
     code_status: Optional[str] = None
     feedback: Optional[str] = None
     hint_tree: Optional[str] = None
+    last_correct_code: Optional[str] = None
 
 class PromptRequest(BaseModel):
     prompt_type: str

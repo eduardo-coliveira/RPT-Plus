@@ -136,6 +136,7 @@ def record_action_log(
     code_status: Optional[str] = None,
     feedback: Optional[str] = None,
     hint_tree: Optional[str] = None,
+    last_correct_code: Optional[str] = None,
     *,
     config: DatabaseConfig,
 ) -> bool:
@@ -155,8 +156,8 @@ def record_action_log(
                 cursor.execute(
                     """
                     INSERT INTO action_log
-                    (timestamp, user_id, exercise, current_code, action, previous_code, code_status, feedback, hint_tree)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    (timestamp, user_id, exercise, current_code, action, previous_code, code_status, feedback, hint_tree, last_correct_code)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         datetime.now(ZoneInfo('Europe/Amsterdam')).isoformat(),
@@ -168,6 +169,7 @@ def record_action_log(
                         code_status,
                         feedback,
                         hint_tree,
+                        last_correct_code,
                     ),
                 )
                 conn.commit()

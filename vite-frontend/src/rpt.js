@@ -9,9 +9,12 @@ const workflowState = {
   submittedCode: '',
   lastKnownFunctionalCode: '',
   previousSubmittedCode: '',
+  codeBeforeLatestSubmission: '',
   hints: [],
   hintTree: undefined,
   hintedCodeSnapshot: '',
+  hintDiagnosis: null,
+  hintLogContext: null,
   isGeneratingHints: false,
   hintRequestGeneration: 0,
   diagnosisResult: '',
@@ -26,9 +29,10 @@ async function recordUserAction(action, details = {}) {
     username: user.username,
     group: user.group,
     exercise: workflowState.selectedExerciseId,
-    current_code: typeof editor !== 'undefined' ? editor.getValue() : '',
+    current_code: details.current_code ?? (typeof editor !== 'undefined' ? editor.getValue() : ''),
     action,
-    previous_code: details.previous_code ?? workflowState.previousSubmittedCode,
+    previous_code: details.previous_code ?? workflowState.codeBeforeLatestSubmission,
+    last_correct_code: details.last_correct_code ?? workflowState.lastKnownFunctionalCode,
     code_status: details.code_status ?? null,
     feedback: details.feedback ?? null,
     hint_tree: details.hint_tree ?? null,
@@ -103,8 +107,10 @@ async function loadExerciseById(exerciseId) {
   workflowState.submittedCode = exercise.start_method;
   workflowState.lastKnownFunctionalCode = exercise.start_method;
   workflowState.previousSubmittedCode = exercise.start_method;
+  workflowState.codeBeforeLatestSubmission = exercise.start_method;
   workflowState.diagnosisResult = null;
   workflowState.lastDiagnosedCode = '';
+  workflowState.diagnosedCodeSnapshot = '';
   editor.setValue(exercise.start_method, -1);
 
   const container = document.getElementById('refactoringCardContainer');
@@ -126,6 +132,11 @@ async function handleCodeSubmission() {
   rptView.clearMessages();
   rptView.clearHintDisplay();
   workflowState.submittedCode = editor.getValue();
+  const submission = {
+    current_code: workflowState.submittedCode,
+    previous_code: workflowState.previousSubmittedCode,
+    last_correct_code: workflowState.lastKnownFunctionalCode,
+  };
 
   if (!hasUnprocessedCodeChanges()) {
     const reused = await replayCachedDiagnosisResult();
@@ -146,30 +157,36 @@ async function handleCodeSubmission() {
 
   if (response.status === 'compile_error') {
     await recordUserAction('Diagnose', {
-      previous_code: workflowState.previousSubmittedCode,
+      ...submission,
       code_status: response.status || 'unknown',
       feedback: response.message || null,
     });
-    workflowState.previousSubmittedCode = workflowState.submittedCode;
+    advanceSubmissionHistory(submission);
     showCompileError(response.message);
     return;
   }
 
   if (response.status === 'notequiv') {
-    await processNonEquivalentDiagnosis(response);
-    workflowState.previousSubmittedCode = workflowState.submittedCode;
+    await processNonEquivalentDiagnosis(response, submission);
+    advanceSubmissionHistory(submission);
     return;
   }
 
   if (response.status === 'correct') {
     const feedback = await processCorrectDiagnosis();
     await recordUserAction('Diagnose', {
-      previous_code: workflowState.previousSubmittedCode,
+      ...submission,
       code_status: response.status || 'unknown',
       feedback: JSON.stringify(feedback?.refactor_steps) || null,
     });
-    workflowState.previousSubmittedCode = workflowState.submittedCode;
+    advanceSubmissionHistory(submission);
   }
+}
+
+/** Make a submission the latest one, keeping the code that preceded it. */
+function advanceSubmissionHistory(submission) {
+  workflowState.codeBeforeLatestSubmission = submission.previous_code;
+  workflowState.previousSubmittedCode = submission.current_code;
 }
 
 /** Request and render feedback for a correct diagnosis. */
@@ -203,12 +220,11 @@ async function processCorrectDiagnosis() {
 }
 
 /** Ask the backend to diagnose the current code. */
-async function requestCodeDiagnosis() {
+async function requestCodeDiagnosis(code = workflowState.submittedCode) {
   try {
     return await rptApi.requestDiagnosis({
       exercise_id: workflowState.selectedExerciseId,
-      submitted_code: workflowState.submittedCode,
-      previous_code: workflowState.previousSubmittedCode,
+      submitted_code: code,
       username: window.currentUser?.username || 'anonymous',
     });
   } catch (error) {
@@ -221,7 +237,7 @@ async function requestNonEquivalentFeedback(diagnosisData) {
   const result = await rptApi.requestNonEquivalentFeedback({
     exercise_id: workflowState.selectedExerciseId,
     submitted_code: workflowState.submittedCode,
-    previous_code: workflowState.previousSubmittedCode,
+    previous_code: workflowState.lastKnownFunctionalCode,
     hint_group: window.currentUser?.group,
     test_case_failure: diagnosisData.reason,
   });
@@ -234,33 +250,29 @@ async function requestHintTree() {
   const generation = workflowState.hintRequestGeneration;
   const exerciseId = workflowState.selectedExerciseId;
   const currentEditorCode = editor.getValue();
-  const submittedCodeSnapshot = workflowState.submittedCode;
-  const previousCodeSnapshot = workflowState.previousSubmittedCode;
-  const codeChangedSinceLastDiagnosis = currentEditorCode.trim() !== workflowState.lastDiagnosedCode.trim();
-  const hasCachedDiagnosis = hasCachedDiagnosisForCurrentCode();
-  let freshDiagnosis = hasCachedDiagnosis ? workflowState.diagnosisResult : null;
+  const loggedCodeContext = {
+    current_code: currentEditorCode,
+    // Unsubmitted edits follow the latest submission; the submitted code follows the one before it.
+    previous_code: currentEditorCode.trim() === workflowState.previousSubmittedCode.trim()
+      ? workflowState.codeBeforeLatestSubmission
+      : workflowState.previousSubmittedCode,
+    last_correct_code: workflowState.lastKnownFunctionalCode,
+  };
+  let freshDiagnosis = findCachedDiagnosis(currentEditorCode);
 
-  if (!freshDiagnosis || codeChangedSinceLastDiagnosis) {
+  if (!freshDiagnosis) {
     rptView.setLoadingIndicatorVisible(true);
-    freshDiagnosis = await requestCodeDiagnosis();
+    freshDiagnosis = await requestCodeDiagnosis(currentEditorCode);
     rptView.setLoadingIndicatorVisible(false);
     if (generation !== workflowState.hintRequestGeneration) return null;
     if (!freshDiagnosis) {
       showFeedbackMessage('Failed to diagnose code. Please try again.', msgtype.WARNING);
       return null;
     }
-    workflowState.diagnosisResult = freshDiagnosis;
-    workflowState.lastDiagnosedCode = currentEditorCode;
+    workflowState.hintDiagnosis = { code: currentEditorCode, result: freshDiagnosis };
   }
 
   if (freshDiagnosis.status !== 'correct') {
-    await recordUserAction('GetHint', {
-      previous_code: previousCodeSnapshot,
-      code_status: freshDiagnosis?.status || 'unknown',
-      feedback: freshDiagnosis?.message || freshDiagnosis?.reason || null,
-      hint_tree: null,
-    });
-    if (generation !== workflowState.hintRequestGeneration) return null;
     showFeedbackMessage('You need to fix code functionality to get hints on code quality.', msgtype.FAILURE);
     return null;
   }
@@ -274,8 +286,7 @@ async function requestHintTree() {
   try {
     const data = await rptApi.requestHintTree({
       exercise_id: exerciseId,
-      submitted_code: submittedCodeSnapshot,
-      previous_code: previousCodeSnapshot,
+      submitted_code: currentEditorCode,
       hint_group: window.currentUser?.group,
       code_diagnosis: freshDiagnosis.status || null,
       username: window.currentUser?.username || 'anonymous',
@@ -289,7 +300,7 @@ async function requestHintTree() {
     }
 
     await recordUserAction('GetHint', {
-      previous_code: previousCodeSnapshot,
+      ...loggedCodeContext,
       code_status: freshDiagnosis?.status || 'correct',
       hint_tree: data?.hint_tree ? JSON.stringify(data.hint_tree) : null,
       feedback: null,
@@ -298,7 +309,11 @@ async function requestHintTree() {
 
     workflowState.hints = Array.isArray(data?.suggestions) ? data.suggestions : [];
     workflowState.hintTree = data?.hint_tree || null;
-    workflowState.hintedCodeSnapshot = submittedCodeSnapshot;
+    workflowState.hintedCodeSnapshot = currentEditorCode;
+    workflowState.hintLogContext = {
+      ...loggedCodeContext,
+      code_status: freshDiagnosis?.status || 'correct',
+    };
 
     if (!data.hint_tree) {
       const fallbackHint = Array.isArray(data.suggestions)
@@ -351,12 +366,12 @@ function renderCurrentHintTree(hintTree) {
   rptView.renderCurrentHintTree(hintTree, {
     onEmpty: () => showFeedbackMessage('Your code already looks good!', msgtype.CORRECT),
     onExpandHint: (targetedHint) => recordUserAction('ExpandHint', {
-      code_status: workflowState.diagnosisResult?.status || null,
+      ...workflowState.hintLogContext,
       hint_tree: workflowState.hintTree ? JSON.stringify(workflowState.hintTree) : null,
       feedback: targetedHint,
     }),
     onGetCode: (refactoredCode) => recordUserAction('GetCode', {
-      code_status: workflowState.diagnosisResult?.status || null,
+      ...workflowState.hintLogContext,
       hint_tree: workflowState.hintTree ? JSON.stringify(workflowState.hintTree) : null,
       feedback: refactoredCode,
     }),
@@ -364,7 +379,7 @@ function renderCurrentHintTree(hintTree) {
 }
 
 /** Render feedback for a change in behavior. */
-async function processNonEquivalentDiagnosis(data) {
+async function processNonEquivalentDiagnosis(data, submission) {
   if (data.expected === 'N/A') {
     showFeedbackMessage('Something did not work!', msgtype.FAILURE);
   } else {
@@ -381,20 +396,30 @@ async function processNonEquivalentDiagnosis(data) {
     data.notEquivalentFeedback = feedback;
   }
 
-  await recordUserAction('Diagnose', {
-    previous_code: workflowState.previousSubmittedCode,
-    code_status: 'notequiv',
-    feedback: feedback?.error_summary || JSON.stringify(feedback) || null,
-  });
+  // A replayed diagnosis has no submission, so it is not logged again.
+  if (submission) {
+    data.submission = submission;
+    await recordUserAction('Diagnose', {
+      ...submission,
+      code_status: 'notequiv',
+      feedback: feedback?.error_summary || JSON.stringify(feedback) || null,
+    });
+  }
   document.getElementById('feedbackContainer').appendChild(
     rptView.createNonEquivalentFeedbackChip(
       feedback,
       alertClasses[msgtype.FAILURE],
       typeLabels[msgtype.FAILURE],
-      () => recordUserAction('SeeFixSuggestion', {
-        code_status: 'notequiv',
-        feedback: feedback.fix_suggestion,
-      }),
+      () => {
+        // Chips re-rendered for a replayed diagnosis must not log the same action again.
+        if (data.seeFixLogged) return undefined;
+        data.seeFixLogged = true;
+        return recordUserAction('SeeFixSuggestion', {
+          ...data.submission,
+          code_status: 'notequiv',
+          feedback: feedback.fix_suggestion,
+        });
+      },
     ),
   );
 }
@@ -425,15 +450,21 @@ function resetHintState() {
   workflowState.hintTree = null;
   workflowState.hints = [];
   workflowState.hintedCodeSnapshot = '';
+  workflowState.hintDiagnosis = null;
+  workflowState.hintLogContext = null;
 }
 
-/** Check whether the editor still matches the last diagnosis. */
-function hasCachedDiagnosisForCurrentCode() {
-  return Boolean(
-    workflowState.diagnosisResult &&
-    typeof workflowState.diagnosisResult.status === 'string' &&
-    editor.getValue().trim() === workflowState.lastDiagnosedCode.trim()
-  );
+/** Find a diagnosis already made for this code by a submission or a hint request. */
+function findCachedDiagnosis(code) {
+  const trimmedCode = code.trim();
+  const submissionDiagnosis = workflowState.diagnosisResult;
+  if (typeof submissionDiagnosis?.status === 'string' && trimmedCode === workflowState.lastDiagnosedCode.trim()) {
+    return submissionDiagnosis;
+  }
+  if (workflowState.hintDiagnosis && trimmedCode === workflowState.hintDiagnosis.code.trim()) {
+    return workflowState.hintDiagnosis.result;
+  }
+  return null;
 }
 
 /** Show the cached diagnosis for unchanged code. */

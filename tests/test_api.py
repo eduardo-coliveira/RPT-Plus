@@ -224,6 +224,7 @@ def test_log_action_returns_ok_when_database_write_succeeds(client, monkeypatch)
         "code_status": "correct",
         "feedback": "Looks good",
         "hint_tree": '{"Tree": []}',
+        "last_correct_code": "return true && true;",
     }
     created_at = time.time()
     client.app.state.active_user_sessions["learner"] = created_at
@@ -422,7 +423,7 @@ def test_diagnose_reports_the_first_failing_test(client, monkeypatch):
             "call": f'{exercise.call_method}({", ".join(map(str, exercise.tests[0].inputs))})',
         "expected": "false",
         "actual": "true",
-        "reason": "Expected false, got true",
+        "reason": f'{exercise.call_method}({", ".join(map(str, exercise.tests[0].inputs))}) expected false, got true',
     }
 
 
@@ -576,16 +577,15 @@ def test_notequiv_feedback_selects_llm_prompt_and_failure_text(
     llm = Mock()
     if prompt_type == "STEP_ERROR":
         llm.request_structured_response.return_value = StepErrorFeedback(
-            classification="Refactoring misconception",
+            summary="The else branch was lost.",
             incorrect_code="if (condition1 && condition2) {}",
             previous_code="if (condition1) {} else {}",
             explanation="The else branch was lost.",
-            failed_test="The false condition skips the required branch.",
             fix_suggestion="Preserve the else behavior when simplifying the conditions.",
         )
     else:
         llm.request_structured_response.return_value = SimpleError(
-            classification="Refactoring misconception",
+            summary="The else branch was lost.",
             incorrect_code="if (condition1 && condition2) {}",
             failed_test="The false condition skips the required branch.",
             fix_suggestion="Preserve the else behavior when simplifying the conditions.",
@@ -603,7 +603,7 @@ def test_notequiv_feedback_selects_llm_prompt_and_failure_text(
     response = client.post("/notequiv_feedback", json=payload)
 
     assert response.status_code == 200
-    assert response.json()["classification"] == "Refactoring misconception"
+    assert response.json()["summary"] == "The else branch was lost."
     assert response.json()["incorrect_code"] == "if (condition1 && condition2) {}"
     assert ("explanation" in response.json()) == (prompt_type == "STEP_ERROR")
     llm.request_structured_response.assert_called_once_with(

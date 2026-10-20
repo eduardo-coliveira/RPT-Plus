@@ -30,6 +30,7 @@ async def log_action(request_data: ActionLogRequest, request: Request):
         code_status=request_data.code_status,
         feedback=request_data.feedback,
         hint_tree=request_data.hint_tree,
+        last_correct_code=request_data.last_correct_code,
         config=request.app.state.database_config,
     )
     if not success:
