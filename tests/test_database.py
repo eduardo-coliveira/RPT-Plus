@@ -169,12 +169,11 @@ def test_authenticate_user_credentials_returns_none_when_database_fails(monkeypa
     assert database.authenticate_user_credentials("learner", "password", db_config) is None
 
 
-def test_record_action_log_inserts_for_known_user_and_commits(fake_db):
+def test_record_action_log_inserts_for_user_id_and_commits(fake_db):
     cursor, connection, config = fake_db
-    cursor.rows = iter([{"id": 17}])
 
     result = database.record_action_log(
-        username="learner",
+        user_id=17,
         exercise="0.isOvenReady",
         current_code="return true;",
         action="Diagnose",
@@ -187,8 +186,8 @@ def test_record_action_log_inserts_for_known_user_and_commits(fake_db):
     )
 
     assert result is True
-    assert cursor.executed[0] == ("SELECT id FROM users WHERE username = %s", ("learner",))
-    insert_query, insert_values = cursor.executed[1]
+    assert len(cursor.executed) == 1
+    insert_query, insert_values = cursor.executed[0]
     assert "INSERT INTO action_log" in insert_query
     assert insert_values[1:] == (
         17,
@@ -207,23 +206,6 @@ def test_record_action_log_inserts_for_known_user_and_commits(fake_db):
     assert connection.committed
 
 
-def test_record_action_log_skips_insert_for_unknown_user(fake_db):
-    cursor, connection, config = fake_db
-    cursor.rows = iter([None])
-
-    result = database.record_action_log(
-        username="missing",
-        exercise="0.isOvenReady",
-        current_code="code",
-        action="Diagnose",
-        config=config,
-    )
-
-    assert result is False
-    assert cursor.executed == [("SELECT id FROM users WHERE username = %s", ("missing",))]
-    assert not connection.committed
-
-
 def test_record_action_log_returns_false_when_database_fails(monkeypatch, db_config):
     monkeypatch.setattr(
         database,
@@ -232,7 +214,7 @@ def test_record_action_log_returns_false_when_database_fails(monkeypatch, db_con
     )
 
     result = database.record_action_log(
-        username="learner",
+        user_id=17,
         exercise="0.isOvenReady",
         current_code="code",
         action="Diagnose",

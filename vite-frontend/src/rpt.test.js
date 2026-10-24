@@ -78,6 +78,12 @@ describe('exercise and hint workflows', () => {
     delete window.startApp;
   });
 
+  /** Start the tutor and forget the startup requests, so tests only see what they trigger. */
+  async function startTutor(requests) {
+    await initializeRefactoringTutor();
+    requests.length = 0;
+  }
+
   function mockBackend({
     exerciseData = exercises,
     diagnosis = { status: 'correct' },
@@ -124,7 +130,7 @@ describe('exercise and hint workflows', () => {
     return { requests, fetchMock };
   }
 
-  it('loads the selected exercise into the editor and diagnoses it', async () => {
+  it('loads the selected exercise into the editor without diagnosing it, and logs the first exercise', async () => {
     const { requests } = mockBackend();
 
     await initializeRefactoringTutor();
@@ -132,7 +138,16 @@ describe('exercise and hint workflows', () => {
     expect(document.getElementById('exname').textContent).toBe('Exercise 0.isOvenReady');
     expect(document.getElementById('exdesc').textContent).toBe(exercises[0].description);
     expect(editor.getValue()).toBe(exercises[0].start_method);
-    expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(1);
+    expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(0);
+    const firstExerciseLog = requests
+      .filter(({ url }) => url === '/log_action')
+      .map(({ options }) => JSON.parse(options.body));
+    expect(firstExerciseLog).toHaveLength(1);
+    expect(firstExerciseLog[0]).toMatchObject({
+      action: 'NewExercise',
+      exercise: exercises[0].id,
+      current_code: exercises[0].start_method,
+    });
 
     const selector = document.getElementById('exerciseSelect');
     selector.value = exercises[1].id;
@@ -144,7 +159,7 @@ describe('exercise and hint workflows', () => {
 
     expect(editor.getValue()).toBe(exercises[1].start_method);
     expect(requests.some(({ url }) => url === `/exercise/${exercises[1].id}`)).toBe(true);
-    expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(2);
+    expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(0);
 
     await vi.waitFor(() => {
       expect(requests.some(({ url, options }) => {
@@ -159,7 +174,7 @@ describe('exercise and hint workflows', () => {
     const newExerciseLog = requests
       .filter(({ url }) => url === '/log_action')
       .map(({ options }) => JSON.parse(options.body))
-      .find(({ action }) => action === 'NewExercise');
+      .find(({ action, exercise }) => action === 'NewExercise' && exercise === exercises[1].id);
     expect(newExerciseLog.previous_code).toBe(exercises[1].start_method);
   });
 
@@ -180,23 +195,23 @@ describe('exercise and hint workflows', () => {
     await vi.waitFor(() => {
       expect(editor.session.setMode).toHaveBeenLastCalledWith('ace/mode/csharp');
       expect(editor.getValue()).toBe(csharpExercise.start_method);
-      expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(2);
     });
+    expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(0);
   });
 
   it('restarts the current exercise, resets the editor and diagnosis cache, and logs the restart', async () => {
     const editedCode = 'public static boolean isOvenReady(int temperature) { return false; }';
     const { requests } = mockBackend();
 
-    await initializeRefactoringTutor();
+    await startTutor(requests);
     editor.setValue(editedCode);
     document.getElementById('runBtn').click();
-    await vi.waitFor(() => expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(2));
+    await vi.waitFor(() => expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(1));
 
     document.getElementById('loadex').click();
     await vi.waitFor(() => {
       expect(editor.getValue()).toBe(exercises[0].start_method);
-      expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(3);
+      expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(1);
       expect(requests.some(({ url, options }) => {
         if (url !== '/log_action') return false;
         const payload = JSON.parse(options.body);
@@ -207,7 +222,7 @@ describe('exercise and hint workflows', () => {
 
     document.getElementById('runBtn').click();
     await vi.waitFor(() => {
-      expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(4);
+      expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(2);
       expect(requests.filter(({ url }) => url === '/log_action')).toHaveLength(3);
       expect(document.getElementById('feedbackContainer').textContent).toContain(
         'No structural changes were found.',
@@ -229,8 +244,8 @@ describe('exercise and hint workflows', () => {
     selector.dispatchEvent(new Event('input', { bubbles: true }));
     await vi.waitFor(() => {
       expect(document.getElementById('exname').textContent).toBe('Exercise 1.busTicketPrice');
-      expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(2);
     });
+    expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(0);
 
     document.getElementById('gethinttree').click();
     await vi.waitFor(() => {
@@ -239,10 +254,62 @@ describe('exercise and hint workflows', () => {
     });
   });
 
+  it('requests hints for the untouched starter code without diagnosing it', async () => {
+    const { requests } = mockBackend();
+
+    await startTutor(requests);
+    document.getElementById('gethinttree').click();
+
+    await vi.waitFor(() => expect(requests.filter(({ url }) => url === '/hint_tree')).toHaveLength(1));
+    expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(0);
+  });
+
+  it('shows a timeout message, and diagnoses the same code again on retry', async () => {
+    const { requests } = mockBackend({
+      diagnoses: [{ status: 'timeout', message: 'Judge0 timed out' }, { status: 'correct' }],
+    });
+
+    await startTutor(requests);
+    editor.setValue('changed code');
+    document.getElementById('runBtn').click();
+    await vi.waitFor(() => {
+      expect(document.getElementById('feedbackContainer').textContent).toContain(
+        'Timeout error when compiling code. Try again.',
+      );
+    });
+    expect(requests.some(({ url }) => url === '/log_action')).toBe(false);
+    expect(document.getElementById('loadingSpinner').style.display).toBe('none');
+
+    document.getElementById('runBtn').click();
+    await vi.waitFor(() => expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(2));
+    expect(document.getElementById('feedbackContainer').textContent).not.toContain("You haven't changed the code.");
+  });
+
+  it('shows a timeout message for hint requests and does not cache the failed diagnosis', async () => {
+    const { requests } = mockBackend({
+      diagnoses: [{ status: 'timeout', message: 'Judge0 timed out' }, { status: 'correct' }],
+    });
+
+    await startTutor(requests);
+    editor.setValue('changed code');
+    document.getElementById('gethinttree').click();
+    await vi.waitFor(() => {
+      expect(document.getElementById('feedbackContainer').textContent).toContain(
+        'Timeout error when compiling code. Try again.',
+      );
+    });
+    expect(requests.some(({ url }) => url === '/hint_tree')).toBe(false);
+
+    document.getElementById('gethinttree').click();
+    await vi.waitFor(() => expect(requests.filter(({ url }) => url === '/hint_tree')).toHaveLength(1));
+    expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(2);
+  });
+
   it('does not request quality hints when the diagnosis is not equivalent', async () => {
     const { requests } = mockBackend({ diagnosis: { status: 'notequiv', reason: 'A test failed.' } });
 
-    await initializeRefactoringTutor();
+    await startTutor(requests);
+    editor.setValue('changed code');
     document.getElementById('gethinttree').click();
 
     await vi.waitFor(() => {
@@ -257,7 +324,7 @@ describe('exercise and hint workflows', () => {
   it('reveals hint cards and expands a hint through code and reason', async () => {
     const { requests } = mockBackend();
 
-    await initializeRefactoringTutor();
+    await startTutor(requests);
     document.getElementById('gethinttree').click();
 
     await vi.waitFor(() => {
@@ -298,10 +365,10 @@ describe('exercise and hint workflows', () => {
   it('shows compile errors and logs the diagnosed submission', async () => {
     const submittedCode = 'public static boolean isOvenReady(int temperature) { return true; }';
     const { requests } = mockBackend({
-      diagnoses: [{ status: 'correct' }, { status: 'compile_error', message: 'Missing semicolon' }],
+      diagnoses: [{ status: 'compile_error', message: 'Missing semicolon' }],
     });
 
-    await initializeRefactoringTutor();
+    await startTutor(requests);
     editor.setValue(submittedCode);
     document.getElementById('runBtn').click();
 
@@ -330,7 +397,6 @@ describe('exercise and hint workflows', () => {
     const submittedCode = 'public static boolean isOvenReady(int temperature) { return false; }';
     const { requests } = mockBackend({
       diagnoses: [
-        { status: 'correct' },
         {
           status: 'notequiv',
           call: 'isOvenReady(150)',
@@ -341,7 +407,7 @@ describe('exercise and hint workflows', () => {
       ],
     });
 
-    await initializeRefactoringTutor();
+    await startTutor(requests);
     editor.setValue(submittedCode);
     document.getElementById('runBtn').click();
 
@@ -374,12 +440,12 @@ describe('exercise and hint workflows', () => {
     const code1 = 'code1';
     const code2 = 'code2';
     const { requests } = mockBackend({
-      diagnoses: [{ status: 'correct' }, notEquivalent, { status: 'correct' }],
+      diagnoses: [notEquivalent, { status: 'correct' }],
     });
     const loggedActions = () =>
       requests.filter(({ url }) => url === '/log_action').map(({ options }) => JSON.parse(options.body));
 
-    await initializeRefactoringTutor();
+    await startTutor(requests);
     editor.setValue(code1);
     document.getElementById('runBtn').click();
     await vi.waitFor(() => expect(loggedActions()).toHaveLength(1));
@@ -413,10 +479,10 @@ describe('exercise and hint workflows', () => {
 
   it('sends the last correct code, not the last attempt, to the LLM feedback and omits it elsewhere', async () => {
     const notEquivalent = () => ({ status: 'notequiv', reason: 'Expected true, got false' });
-    const { requests } = mockBackend({ diagnoses: [{ status: 'correct' }, notEquivalent(), notEquivalent()] });
+    const { requests } = mockBackend({ diagnoses: [notEquivalent(), notEquivalent()] });
     const bodies = (url) => requests.filter((request) => request.url === url).map(({ options }) => JSON.parse(options.body));
 
-    await initializeRefactoringTutor();
+    await startTutor(requests);
     editor.setValue('notequiv1');
     document.getElementById('runBtn').click();
     await vi.waitFor(() => expect(bodies('/notequiv_feedback')).toHaveLength(1));
@@ -434,7 +500,7 @@ describe('exercise and hint workflows', () => {
   it('does not send previous code with hint requests', async () => {
     const { requests } = mockBackend();
 
-    await initializeRefactoringTutor();
+    await startTutor(requests);
     document.getElementById('gethinttree').click();
     await vi.waitFor(() => expect(document.querySelectorAll('.hint-block')).toHaveLength(2));
 
@@ -449,10 +515,10 @@ describe('exercise and hint workflows', () => {
 
     it('diagnoses the editor code and withholds hints when edited code is not equivalent', async () => {
       const { requests } = mockBackend({
-        diagnoses: [{ status: 'correct' }, { status: 'correct' }, { status: 'notequiv', reason: 'Wrong result' }],
+        diagnoses: [{ status: 'correct' }, { status: 'notequiv', reason: 'Wrong result' }],
       });
 
-      await initializeRefactoringTutor();
+      await startTutor(requests);
       editor.setValue('code1');
       document.getElementById('runBtn').click();
       await vi.waitFor(() => expect(logs(requests)).toHaveLength(1));
@@ -470,10 +536,10 @@ describe('exercise and hint workflows', () => {
 
     it('gives hints for edited code that is now equivalent and sends that code for hints', async () => {
       const { requests } = mockBackend({
-        diagnoses: [{ status: 'correct' }, { status: 'notequiv', reason: 'Wrong result' }, { status: 'correct' }],
+        diagnoses: [{ status: 'notequiv', reason: 'Wrong result' }, { status: 'correct' }],
       });
 
-      await initializeRefactoringTutor();
+      await startTutor(requests);
       editor.setValue('code1');
       document.getElementById('runBtn').click();
       await vi.waitFor(() => expect(logs(requests)).toHaveLength(1));
@@ -487,10 +553,10 @@ describe('exercise and hint workflows', () => {
 
     it('does not request a second hint tree for unchanged code, and keeps submission state separate', async () => {
       const { requests } = mockBackend({
-        diagnoses: [{ status: 'correct' }, { status: 'correct' }, { status: 'correct' }],
+        diagnoses: [{ status: 'correct' }, { status: 'correct' }],
       });
 
-      await initializeRefactoringTutor();
+      await startTutor(requests);
       editor.setValue('code1');
       document.getElementById('gethinttree').click();
       await vi.waitFor(() => expect(logs(requests)).toHaveLength(1));
@@ -498,19 +564,19 @@ describe('exercise and hint workflows', () => {
       document.getElementById('gethinttree').click();
       await vi.waitFor(() => expect(document.querySelectorAll('.hint-block').length).toBeGreaterThan(0));
       expect(bodies(requests, '/hint_tree')).toHaveLength(1);
-      expect(bodies(requests, '/diagnose')).toHaveLength(2);
+      expect(bodies(requests, '/diagnose')).toHaveLength(1);
 
       document.getElementById('runBtn').click();
       await vi.waitFor(() => expect(logs(requests)).toHaveLength(2));
-      expect(bodies(requests, '/diagnose')).toHaveLength(3);
+      expect(bodies(requests, '/diagnose')).toHaveLength(2);
       expect(bodies(requests, '/diagnose').at(-1).submitted_code).toBe('code1');
       expect(document.getElementById('feedbackContainer').textContent).not.toContain("You haven't changed the code.");
     });
 
     it('logs follow-up hint actions with the context of the hint request that built the tree', async () => {
-      const { requests } = mockBackend({ diagnoses: [{ status: 'correct' }, { status: 'correct' }] });
+      const { requests } = mockBackend({ diagnoses: [{ status: 'correct' }] });
 
-      await initializeRefactoringTutor();
+      await startTutor(requests);
       editor.setValue('code1');
       document.getElementById('gethinttree').click();
       await vi.waitFor(() => expect(document.querySelectorAll('.hint-block')).toHaveLength(2));
@@ -531,9 +597,9 @@ describe('exercise and hint workflows', () => {
     });
 
     it('logs the previous code of a hint as the latest submission when the code was edited after it', async () => {
-      const { requests } = mockBackend({ diagnoses: [{ status: 'correct' }, { status: 'correct' }, { status: 'correct' }] });
+      const { requests } = mockBackend({ diagnoses: [{ status: 'correct' }, { status: 'correct' }] });
 
-      await initializeRefactoringTutor();
+      await startTutor(requests);
       editor.setValue('code1');
       document.getElementById('runBtn').click();
       await vi.waitFor(() => expect(logs(requests)).toHaveLength(1));
@@ -546,12 +612,12 @@ describe('exercise and hint workflows', () => {
 
     it('logs the fix suggestion only once for a replayed diagnosis', async () => {
       const { requests } = mockBackend({
-        diagnoses: [{ status: 'correct' }, { status: 'notequiv', reason: 'Wrong result' }],
+        diagnoses: [{ status: 'notequiv', reason: 'Wrong result' }],
         notEquivalentFeedback: { error_summary: 'Broken', fix_suggestion: 'Fix it', incorrect_code: 'x', previous_code: 'y' },
       });
       const seeFix = () => document.querySelector('#feedbackContainer md-text-button');
 
-      await initializeRefactoringTutor();
+      await startTutor(requests);
       editor.setValue('code1');
       document.getElementById('runBtn').click();
       await vi.waitFor(() => expect(seeFix()).not.toBeNull());
@@ -567,11 +633,11 @@ describe('exercise and hint workflows', () => {
 
     it('logs the fix suggestion with the context of the diagnosis that produced it', async () => {
       const { requests } = mockBackend({
-        diagnoses: [{ status: 'correct' }, { status: 'notequiv', reason: 'Wrong result' }],
+        diagnoses: [{ status: 'notequiv', reason: 'Wrong result' }],
         notEquivalentFeedback: { error_summary: 'Broken', fix_suggestion: 'Fix it', incorrect_code: 'x', previous_code: 'y' },
       });
 
-      await initializeRefactoringTutor();
+      await startTutor(requests);
       editor.setValue('code1');
       document.getElementById('runBtn').click();
       await vi.waitFor(() => expect(document.querySelector('#feedbackContainer md-text-button')).not.toBeNull());
@@ -593,18 +659,18 @@ describe('exercise and hint workflows', () => {
   it('diagnoses and logs identical code again after a restart', async () => {
     const notEquivalent = () => ({ status: 'notequiv', reason: 'Wrong result' });
     const { requests } = mockBackend({
-      diagnoses: [{ status: 'correct' }, notEquivalent(), { status: 'correct' }, notEquivalent()],
+      diagnoses: [notEquivalent(), notEquivalent()],
     });
     const diagnoseLogs = () =>
       requests.filter(({ url }) => url === '/log_action').filter(({ options }) => JSON.parse(options.body).action === 'Diagnose');
 
-    await initializeRefactoringTutor();
+    await startTutor(requests);
     editor.setValue('code1');
     document.getElementById('runBtn').click();
     await vi.waitFor(() => expect(diagnoseLogs()).toHaveLength(1));
 
     document.getElementById('loadex').click();
-    await vi.waitFor(() => expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(3));
+    await vi.waitFor(() => expect(editor.getValue()).toBe(exercises[0].start_method));
     editor.setValue('code1');
     document.getElementById('runBtn').click();
     await vi.waitFor(() => expect(diagnoseLogs()).toHaveLength(2));
@@ -612,12 +678,12 @@ describe('exercise and hint workflows', () => {
 
   it('does not log a repeated diagnosis of unchanged non-equivalent code', async () => {
     const { requests } = mockBackend({
-      diagnoses: [{ status: 'correct' }, { status: 'notequiv', reason: 'Expected true, got false' }],
+      diagnoses: [{ status: 'notequiv', reason: 'Expected true, got false' }],
     });
     const diagnoseLogs = () =>
       requests.filter(({ url }) => url === '/log_action').filter(({ options }) => JSON.parse(options.body).action === 'Diagnose');
 
-    await initializeRefactoringTutor();
+    await startTutor(requests);
     editor.setValue('changed code');
     document.getElementById('runBtn').click();
     await vi.waitFor(() => expect(diagnoseLogs()).toHaveLength(1));
@@ -642,7 +708,6 @@ describe('exercise and hint workflows', () => {
     };
     const { requests } = mockBackend({
       diagnoses: [
-        { status: 'correct' },
         {
           status: 'notequiv',
           call: 'isOvenReady(150)',
@@ -654,7 +719,7 @@ describe('exercise and hint workflows', () => {
       notEquivalentFeedback: structuredFeedback,
     });
 
-    await initializeRefactoringTutor();
+    await startTutor(requests);
     editor.setValue('changed code');
     document.getElementById('runBtn').click();
 
@@ -694,7 +759,7 @@ describe('exercise and hint workflows', () => {
   it('renders refactoring feedback for behavior-preserving code', async () => {
     const submittedCode = 'public static boolean isOvenReady(int temperature) { return temperature >= 150; }';
     const { requests } = mockBackend({
-      diagnoses: [{ status: 'correct' }, { status: 'correct' }],
+      diagnoses: [{ status: 'correct' }],
       correctFeedback: {
         present_refactorings: true,
         refactor_steps: [{ title: 'Simplify condition', description: 'Return the result directly.', reason: 'Avoid a temporary.' }],
@@ -702,7 +767,7 @@ describe('exercise and hint workflows', () => {
       },
     });
 
-    await initializeRefactoringTutor();
+    await startTutor(requests);
     editor.setValue(submittedCode);
     document.getElementById('runBtn').click();
 
@@ -733,36 +798,32 @@ describe('exercise and hint workflows', () => {
 
   it('reuses a diagnosis for unchanged code and rediagnoses edited code', async () => {
     const { requests } = mockBackend({
-      diagnoses: [
-        { status: 'correct' },
-        { status: 'correct' },
-        { status: 'correct' },
-      ],
+      diagnoses: [{ status: 'correct' }],
     });
 
-    await initializeRefactoringTutor();
+    await startTutor(requests);
     const submittedCode = 'public static boolean isOvenReady(int temperature) { return true; }';
     editor.setValue(submittedCode);
     document.getElementById('runBtn').click();
     await vi.waitFor(() => expect(requests.filter(({ url }) => url === '/correct_feedback')).toHaveLength(1));
-    expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(2);
+    expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(1);
 
     document.getElementById('runBtn').click();
     await vi.waitFor(() => expect(requests.filter(({ url }) => url === '/correct_feedback')).toHaveLength(2));
-    expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(2);
+    expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(1);
 
     editor.setValue(`${submittedCode}\n// edited`);
     document.getElementById('runBtn').click();
     await vi.waitFor(() => expect(requests.filter(({ url }) => url === '/correct_feedback')).toHaveLength(3));
-    expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(3);
+    expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(2);
   });
 
   it('clears the loading spinner when diagnosis requests fail', async () => {
     const { requests } = mockBackend({
-      diagnosisFailures: [null, 'Diagnosis service unavailable'],
+      diagnosisFailures: ['Diagnosis service unavailable'],
     });
 
-    await initializeRefactoringTutor();
+    await startTutor(requests);
     editor.setValue('changed code');
     document.getElementById('runBtn').click();
 
@@ -773,7 +834,7 @@ describe('exercise and hint workflows', () => {
     });
 
     expect(document.getElementById('loadingSpinner').style.display).toBe('none');
-    expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(2);
+    expect(requests.filter(({ url }) => url === '/diagnose')).toHaveLength(1);
   });
 
   it('leaves logout beacon registration to the login module', async () => {
@@ -872,7 +933,6 @@ describe('exercise and hint workflows', () => {
     const hostileFeedback = '**Safe feedback**\n<img src=x onerror="window.__xss=1">';
     mockBackend({
       diagnoses: [
-        { status: 'correct' },
         {
           status: 'notequiv',
           call: 'isOvenReady(150)',

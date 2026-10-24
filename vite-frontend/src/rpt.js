@@ -63,7 +63,7 @@ export async function initializeRefactoringTutor() {
     await loadExerciseById(workflowState.selectedExerciseId);
     await recordUserAction('NewExercise');
   });
-
+  await recordUserAction('NewExercise');
 }
 
 window.startApp = initializeRefactoringTutor;
@@ -89,7 +89,7 @@ async function loadExerciseCatalog() {
   if (workflowState.selectedExerciseId) await loadExerciseById(workflowState.selectedExerciseId);
 }
 
-/** Load an exercise, reset its state, and diagnose its starter code. */
+/** Load an exercise and reset its state; the starter code is assumed to be correct. */
 async function loadExerciseById(exerciseId) {
   workflowState.hintRequestGeneration += 1;
   workflowState.isGeneratingHints = false;
@@ -117,14 +117,8 @@ async function loadExerciseById(exerciseId) {
   container.innerHTML = '';
   container.style.display = 'none';
 
-  rptView.setLoadingIndicatorVisible(true);
-  const initialDiagnosis = await requestCodeDiagnosis();
-  rptView.setLoadingIndicatorVisible(false);
-
-  if (initialDiagnosis) {
-    workflowState.diagnosisResult = initialDiagnosis;
-    workflowState.lastDiagnosedCode = exercise.start_method;
-  }
+  // Hints on the untouched starter code skip the diagnosis request.
+  workflowState.hintDiagnosis = { code: exercise.start_method, result: { status: 'correct' } };
 }
 
 /** Diagnose the current submission or show its cached diagnosis. */
@@ -150,6 +144,8 @@ async function handleCodeSubmission() {
   console.log('Response: ', response);
 
   if (!response) return;
+
+  if (showDiagnosisServiceFailure(response)) return;
 
   workflowState.diagnosisResult = response;
   workflowState.diagnosedCodeSnapshot = workflowState.submittedCode.trim();
@@ -232,6 +228,19 @@ async function requestCodeDiagnosis(code = workflowState.submittedCode) {
   }
 }
 
+/** Show a message when the diagnosis service failed; return whether it did. */
+function showDiagnosisServiceFailure(diagnosis) {
+  if (diagnosis.status === 'timeout') {
+    showFeedbackMessage(DIAGNOSIS_TIMEOUT_MESSAGE, msgtype.FAILURE);
+    return true;
+  }
+  if (diagnosis.status === 'error') {
+    showFeedbackMessage(`Server error: ${diagnosis.message || 'The code could not be diagnosed.'}`, msgtype.FAILURE);
+    return true;
+  }
+  return false;
+}
+
 /** Ask the backend to explain a change in behavior. */
 async function requestNonEquivalentFeedback(diagnosisData) {
   const result = await rptApi.requestNonEquivalentFeedback({
@@ -269,6 +278,7 @@ async function requestHintTree() {
       showFeedbackMessage('Failed to diagnose code. Please try again.', msgtype.WARNING);
       return null;
     }
+    if (showDiagnosisServiceFailure(freshDiagnosis)) return null;
     workflowState.hintDiagnosis = { code: currentEditorCode, result: freshDiagnosis };
   }
 
@@ -489,6 +499,8 @@ async function replayCachedDiagnosisResult() {
 function hasUnprocessedCodeChanges() {
   return workflowState.submittedCode.trim() !== workflowState.diagnosedCodeSnapshot.trim();
 }
+
+const DIAGNOSIS_TIMEOUT_MESSAGE = 'Timeout error when compiling code. Try again.';
 
 const msgtype = {
   FAILURE: 0,

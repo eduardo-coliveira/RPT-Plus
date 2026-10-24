@@ -24,7 +24,7 @@ def _stub_judge0(monkeypatch, result=None, error=None):
     judge0_response.raise_for_status.return_value = None
     judge0_response.json.return_value = result
     judge0_post = Mock(side_effect=error) if error is not None else Mock(return_value=judge0_response)
-    monkeypatch.setattr(judge0.requests, "post", judge0_post)
+    monkeypatch.setattr(judge0.session, "post", judge0_post)
     return judge0_post
 
 
@@ -102,7 +102,7 @@ def test_login_claims_session_and_rejects_duplicate_login(client, monkeypatch):
     monkeypatch.setattr(
         auth,
         "authenticate_user_credentials",
-        lambda username, password, config: {"username": username, "group_name": "group-a"},
+        lambda username, password, config: {"id": 7, "username": username, "group_name": "group-a"},
     )
 
     payload = {"username": "learner", "password": "correct"}
@@ -182,7 +182,7 @@ def test_login_sessions_are_isolated_between_app_instances(client, monkeypatch):
     monkeypatch.setattr(
         auth,
         "authenticate_user_credentials",
-        lambda username, password, config: {"username": username, "group_name": "group-a"},
+        lambda username, password, config: {"id": 7, "username": username, "group_name": "group-a"},
     )
     second_app = api.create_app()
 
@@ -199,7 +199,7 @@ def test_login_sessions_are_isolated_between_app_instances(client, monkeypatch):
 def test_logout_removes_only_the_matching_active_session(client):
     response = client.post("/login", json={"username": "st000", "password": "000000"})
     token = response.json()["session_token"]
-    client.app.state.authenticated_sessions["other-token"] = ("st000", time.time())
+    client.app.state.authenticated_sessions["other-token"] = auth.AuthSession("st000", None, time.time())
 
     logout_response = client.post(
         "/logout",
@@ -228,7 +228,7 @@ def test_log_action_returns_ok_when_database_write_succeeds(client, monkeypatch)
     }
     created_at = time.time()
     client.app.state.active_user_sessions["learner"] = created_at
-    client.app.state.authenticated_sessions["learner-token"] = ("learner", created_at)
+    client.app.state.authenticated_sessions["learner-token"] = auth.AuthSession("learner", 7, created_at)
 
     response = client.post(
         "/log_action",
@@ -238,14 +238,18 @@ def test_log_action_returns_ok_when_database_write_succeeds(client, monkeypatch)
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
-    log_entry.assert_called_once_with(**payload, config=client.app.state.database_config)
+    log_entry.assert_called_once_with(
+        user_id=7,
+        **{key: value for key, value in payload.items() if key != "username"},
+        config=client.app.state.database_config,
+    )
 
 
 def test_log_action_returns_500_when_database_write_fails(client, monkeypatch):
     monkeypatch.setattr(actions, "record_action_log", Mock(return_value=False))
     created_at = time.time()
     client.app.state.active_user_sessions["learner"] = created_at
-    client.app.state.authenticated_sessions["learner-token"] = ("learner", created_at)
+    client.app.state.authenticated_sessions["learner-token"] = auth.AuthSession("learner", 7, created_at)
 
     response = client.post(
         "/log_action",
@@ -289,7 +293,7 @@ def test_log_action_requires_a_valid_session_and_rejects_identity_spoofing(clien
     monkeypatch.setattr(
         auth,
         "authenticate_user_credentials",
-        lambda username, password, config: {"username": username, "group_name": "group-a"},
+        lambda username, password, config: {"id": 7, "username": username, "group_name": "group-a"},
     )
     missing_session_response = client.post(
         "/log_action",
@@ -327,7 +331,7 @@ def test_run_code_translates_mocked_judge0_response(client, monkeypatch):
         "compile_output": "compiler output",
     }
     judge0_post = Mock(return_value=judge0_response)
-    monkeypatch.setattr(judge0.requests, "post", judge0_post)
+    monkeypatch.setattr(judge0.session, "post", judge0_post)
 
     response = client.post("/run_code", json={"code": "public class Main {}"})
 
@@ -350,6 +354,7 @@ def test_run_code_translates_mocked_judge0_response(client, monkeypatch):
             "stdin": "",
             "expected_output": None,
         },
+        timeout=judge0.REQUEST_TIMEOUT_SECONDS,
     )
 
 
@@ -453,6 +458,7 @@ def test_diagnose_accepts_all_matching_test_results_and_sends_generated_program(
             "stdin": "",
             "expected_output": None,
         },
+        timeout=judge0.REQUEST_TIMEOUT_SECONDS,
     )
 
 
@@ -630,3 +636,93 @@ def test_hint_tree_returns_server_error_when_llm_fails(client, monkeypatch):
 
     assert response.status_code == 500
     assert response.json() == {"error": "LLM unavailable"}
+
+
+def test_diagnose_reports_timeout_after_retrying_judge0(client, monkeypatch):
+    monkeypatch.setattr(judge0.time, "sleep", lambda seconds: None)
+    judge0_post = _stub_judge0(monkeypatch, error=judge0.requests.Timeout())
+
+    response = client.post(
+        "/diagnose",
+        json={"exercise_id": _first_exercise(client).id, "submitted_code": "code"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "timeout", "message": "Judge0 timed out"}
+    assert judge0_post.call_count == judge0.MAX_ATTEMPTS
+
+
+def test_judge0_retries_rate_limited_responses_then_succeeds(monkeypatch):
+    monkeypatch.setattr(judge0.time, "sleep", lambda seconds: None)
+    rate_limited = Mock(status_code=429)
+    succeeded = Mock(status_code=200)
+    succeeded.json.return_value = {"stdout": "ok"}
+    monkeypatch.setattr(judge0.session, "post", Mock(side_effect=[rate_limited, succeeded]))
+
+    assert judge0.submit_to_judge0("code", "java") == {"stdout": "ok"}
+
+
+def test_judge0_reports_unavailable_after_repeated_server_errors(monkeypatch):
+    monkeypatch.setattr(judge0.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr(judge0.session, "post", Mock(return_value=Mock(status_code=503)))
+
+    with pytest.raises(judge0.Judge0UnavailableError):
+        judge0.submit_to_judge0("code", "java")
+
+
+def _log_action(client, token, username="learner"):
+    return client.post(
+        "/log_action",
+        json={"username": username, "exercise": "0.isOvenReady", "current_code": "code", "action": "Diagnose"},
+        headers={"X-Session-Token": token},
+    )
+
+
+def _login_as_learner(client, monkeypatch, user_id=7):
+    monkeypatch.setattr(actions, "record_action_log", Mock(return_value=True))
+    monkeypatch.setattr(
+        auth,
+        "authenticate_user_credentials",
+        lambda username, password, config: {"id": user_id, "username": username, "group_name": "group-a"},
+    )
+    return {"username": "learner", "password": "correct"}
+
+
+def test_session_expires_after_idle_period_and_releases_the_username(client, monkeypatch):
+    payload = _login_as_learner(client, monkeypatch)
+    now = time.time()
+    clock = Mock(return_value=now)
+    monkeypatch.setattr(auth.time, "time", clock)
+    token = client.post("/login", json=payload).json()["session_token"]
+
+    clock.return_value = now + auth.SESSION_IDLE_TTL_SECONDS + 1
+
+    assert _log_action(client, token).status_code == 401
+    assert client.app.state.active_user_sessions == {}
+    assert client.post("/login", json=payload).status_code == 200
+
+
+def test_activity_renews_the_session_and_keeps_the_username_locked(client, monkeypatch):
+    payload = _login_as_learner(client, monkeypatch)
+    now = time.time()
+    clock = Mock(return_value=now)
+    monkeypatch.setattr(auth.time, "time", clock)
+    token = client.post("/login", json=payload).json()["session_token"]
+    idle_ttl = auth.SESSION_IDLE_TTL_SECONDS
+
+    for step in (1, 2, 3):
+        clock.return_value = now + step * (idle_ttl - 60)
+        assert _log_action(client, token).status_code == 200
+
+    assert client.post("/login", json=payload).status_code == 409
+    logout = client.post("/logout", json={"username": "learner", "session_token": token})
+    assert logout.status_code == 200
+    assert client.post("/login", json=payload).status_code == 200
+
+
+def test_log_action_passes_the_login_user_id_to_the_database(client, monkeypatch):
+    payload = _login_as_learner(client, monkeypatch, user_id=42)
+    token = client.post("/login", json=payload).json()["session_token"]
+
+    assert _log_action(client, token).status_code == 200
+    assert actions.record_action_log.call_args.kwargs["user_id"] == 42

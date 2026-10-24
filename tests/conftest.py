@@ -33,7 +33,7 @@ def client(monkeypatch):
     )
     monkeypatch.setattr(auth, "authenticate_user_credentials", _unexpected_external_call)
     monkeypatch.setattr(actions, "record_action_log", _unexpected_external_call)
-    monkeypatch.setattr(judge0.requests, "post", _unexpected_external_call)
+    monkeypatch.setattr(judge0.session, "post", _unexpected_external_call)
     test_app = api.create_app()
     with TestClient(test_app) as test_client:
         yield test_client

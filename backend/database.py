@@ -128,7 +128,7 @@ def authenticate_user_credentials(
         return None
 
 def record_action_log(
-    username: str,
+    user_id: int,
     exercise: str,
     current_code: str,
     action: str,
@@ -144,15 +144,7 @@ def record_action_log(
 
     try:
         with open_database_connection(config) as conn:
-            with conn.cursor(pymysql.cursors.DictCursor) as cursor:
-                cursor.execute("SELECT id FROM users WHERE username = %s", (username,))
-                user = cursor.fetchone()
-                if not user:
-                    print(f"User {username} not found for logging")
-                    return False
-
-                user_id = user["id"]
-
+            with conn.cursor() as cursor:
                 cursor.execute(
                     """
                     INSERT INTO action_log

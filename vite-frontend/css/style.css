@@ -92,6 +92,18 @@ nav .logo h1 {
   fill: var(--md-sys-color-primary);
 }
 
+.inline-spinner {
+  display: inline-flex;
+}
+.inline-spinner svg {
+  animation: inline-spinner-rotate 1s linear infinite;
+}
+@keyframes inline-spinner-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .chip.correct {
   background: var(--md-sys-color-tertiary-container);
   color: var(--md-sys-color-on-tertiary-container);

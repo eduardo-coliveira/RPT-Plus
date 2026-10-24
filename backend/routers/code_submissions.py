@@ -8,7 +8,12 @@ from backend.services.diagnosis import (
     build_execution_harness,
     interpret_execution_result,
 )
-from backend.services.judge0 import LANGUAGE_CONFIGS, submit_to_judge0
+from backend.services.judge0 import (
+    LANGUAGE_CONFIGS,
+    Judge0TimeoutError,
+    Judge0UnavailableError,
+    submit_to_judge0,
+)
 
 router = APIRouter()
 
@@ -32,6 +37,8 @@ async def execute_code_submission(request_data: CodeRequest):
                 "stderr": execution_error_output,
             },
         }
+    except (Judge0TimeoutError, Judge0UnavailableError) as error:
+        return {"status": "timeout", "error": str(error)}
     except Exception as error:
         return {"error": str(error)}
 
@@ -46,5 +53,7 @@ async def diagnose_code_submission(request_data: DiagnoseRequest, request: Reque
     try:
         judge_result = submit_to_judge0(full_code, exercise.language)
         return interpret_execution_result(judge_result, exercise)
+    except (Judge0TimeoutError, Judge0UnavailableError) as error:
+        return {"status": "timeout", "message": str(error)}
     except Exception as error:
         return {"status": "error", "message": str(error)}

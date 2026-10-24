@@ -3,7 +3,7 @@
 from fastapi import APIRouter, HTTPException, Request
 
 from backend.database import record_action_log
-from backend.routers.auth import SPECIAL_USERNAME, authenticated_username
+from backend.routers.auth import SPECIAL_USERNAME, authenticated_session
 from backend.schemas import ActionLogRequest
 
 router = APIRouter()
@@ -13,16 +13,17 @@ router = APIRouter()
 async def log_action(request_data: ActionLogRequest, request: Request):
     """Record a learner action and return a success response."""
 
-    username = authenticated_username(request)
-    if not username:
+    session = authenticated_session(request)
+    if not session:
         raise HTTPException(status_code=401, detail="A valid login session is required")
+    username = session.username
     if request_data.username != username:
         raise HTTPException(status_code=403, detail="Action username does not match the login session")
     if username == SPECIAL_USERNAME:
         return {"status": "ok"}
 
     success = record_action_log(
-        username=username,
+        user_id=session.user_id,
         exercise=request_data.exercise,
         current_code=request_data.current_code,
         action=request_data.action,
