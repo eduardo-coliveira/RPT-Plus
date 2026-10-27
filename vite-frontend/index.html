@@ -181,6 +181,8 @@
 
     editor.session.setMode("ace/mode/csharp");
     editor.setShowPrintMargin(false);
+    // Block pasting by emptying the pasted text before Ace inserts it.
+    editor.on("paste", (e) => { e.text = ""; });
     document.getElementById("editor").style.fontSize = "13px";
 
   </script>
