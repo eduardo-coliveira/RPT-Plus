@@ -6,6 +6,7 @@ import * as rptView from './rptView.js';
 const workflowState = {
   availableExercises: [],
   selectedExerciseId: '1.even',
+  starterCode: '',
   submittedCode: '',
   lastKnownFunctionalCode: '',
   previousSubmittedCode: '',
@@ -58,10 +59,42 @@ export async function initializeRefactoringTutor() {
       await loadExerciseById(workflowState.selectedExerciseId);
       await recordUserAction('RestartExercise');
   });
-  document.getElementById('exerciseSelect').addEventListener('input', async (event) => {
-    workflowState.selectedExerciseId = event.target.value;
-    await loadExerciseById(workflowState.selectedExerciseId);
+  const exerciseSelect = document.getElementById('exerciseSelect');
+  const switchDialog = document.getElementById('switchExerciseDialog');
+  let loadedExerciseId = workflowState.selectedExerciseId;
+  const switchExercise = async (exerciseId) => {
+    loadedExerciseId = exerciseId;
+    workflowState.selectedExerciseId = exerciseId;
+    await loadExerciseById(exerciseId);
     await recordUserAction('NewExercise');
+  };
+  let pendingExerciseId = null;
+  exerciseSelect.addEventListener('input', async (event) => {
+    const newId = event.target.value;
+    const hasProgress = editor.getValue().trim() !== workflowState.starterCode.trim();
+    if (!hasProgress || !switchDialog) {
+      await switchExercise(newId);
+      return;
+    }
+    pendingExerciseId = newId;
+    switchDialog.open = true;
+  });
+  document.getElementById('switchExerciseConfirm')?.addEventListener('click', async () => {
+    if (switchDialog) switchDialog.open = false;
+    if (pendingExerciseId === null) return;
+    const newId = pendingExerciseId;
+    pendingExerciseId = null;
+    await switchExercise(newId);
+  });
+  document.getElementById('switchExerciseCancel')?.addEventListener('click', () => {
+    if (switchDialog) switchDialog.open = false;
+    pendingExerciseId = null;
+    exerciseSelect.value = loadedExerciseId;
+  });
+  // Closing the dialog any other way (e.g. Escape) behaves like Cancel.
+  switchDialog?.addEventListener('cancel', () => {
+    pendingExerciseId = null;
+    exerciseSelect.value = loadedExerciseId;
   });
   await recordUserAction('NewExercise');
 }
@@ -104,6 +137,7 @@ async function loadExerciseById(exerciseId) {
   document.getElementById('exdesc').textContent = exercise.description;
   editor.session?.setMode(`ace/mode/${exercise.language === 'csharp' ? 'csharp' : 'java'}`);
 
+  workflowState.starterCode = exercise.start_method;
   workflowState.submittedCode = exercise.start_method;
   workflowState.lastKnownFunctionalCode = exercise.start_method;
   workflowState.previousSubmittedCode = exercise.start_method;

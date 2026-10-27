@@ -47,6 +47,17 @@
       <md-outlined-select label="Exercise" id="exerciseSelect"></md-outlined-select>
     </div>
 
+    <md-dialog id="switchExerciseDialog" style="min-width: 420px; max-width: min(560px, 100% - 48px);">
+      <div slot="headline" style="padding: 24px 24px 0;">Switch exercise?</div>
+      <form slot="content" method="dialog" style="padding: 16px 24px;">
+        Your progress in the current exercise will be lost.
+      </form>
+      <div slot="actions" style="padding: 16px 24px 24px; display: flex; gap: 8px; justify-content: flex-end;">
+        <md-text-button id="switchExerciseCancel">Cancel</md-text-button>
+        <md-text-button id="switchExerciseConfirm">Confirm</md-text-button>
+      </div>
+    </md-dialog>
+
     <div style="height:12px"></div>
 
     <!-- Action Buttons -->

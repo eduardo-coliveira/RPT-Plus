@@ -48,6 +48,9 @@ describe('exercise and hint workflows', () => {
       <button id="runBtn"></button>
       <button id="gethinttree"></button>
       <button id="loadex"></button>
+      <div id="switchExerciseDialog"></div>
+      <button id="switchExerciseConfirm"></button>
+      <button id="switchExerciseCancel"></button>
       <div id="exname"></div>
       <div id="exdesc"></div>
       <div id="refactoringCardContainer"></div>
@@ -129,6 +132,32 @@ describe('exercise and hint workflows', () => {
     vi.stubGlobal('fetch', fetchMock);
     return { requests, fetchMock };
   }
+
+  it('asks for confirmation before switching away from edited code', async () => {
+    mockBackend();
+    await initializeRefactoringTutor();
+    const selector = document.getElementById('exerciseSelect');
+    const dialog = document.getElementById('switchExerciseDialog');
+
+    editor.setValue('edited code');
+    selector.value = exercises[1].id;
+    selector.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(dialog.open).toBe(true);
+    expect(document.getElementById('exname').textContent).toBe('Exercise 0.isOvenReady');
+
+    document.getElementById('switchExerciseCancel').click();
+    expect(dialog.open).toBe(false);
+    expect(selector.value).toBe(exercises[0].id);
+    expect(editor.getValue()).toBe('edited code');
+
+    selector.value = exercises[1].id;
+    selector.dispatchEvent(new Event('input', { bubbles: true }));
+    document.getElementById('switchExerciseConfirm').click();
+    await vi.waitFor(() => {
+      expect(document.getElementById('exname').textContent).toBe('Exercise 1.busTicketPrice');
+    });
+    expect(editor.getValue()).toBe(exercises[1].start_method);
+  });
 
   it('loads the selected exercise into the editor without diagnosing it, and logs the first exercise', async () => {
     const { requests } = mockBackend();
