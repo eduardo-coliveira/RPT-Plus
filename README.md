@@ -2,7 +2,7 @@
 
 RPT+ is an intelligent tutoring system that uses Mistral AI to provide personalized feedback and hints on code refactoring exercises within a method.
 
-We published a paper describing the design and evaluation of RPT+ at the 2026 Koli Calling International Conference on Computing Education Research: `https://doi.org/10.1145/3856208.3856231`
+We published a paper describing the design and evaluation of RPT+ at the 2026 Koli Calling International Conference on Computing Education Research. You can access the paper here: https://doi.org/10.1145/3856208.3856231
 
 ## Features
 
