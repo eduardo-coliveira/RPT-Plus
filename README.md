@@ -2,6 +2,8 @@
 
 RPT+ is an intelligent tutoring system that uses Mistral AI to provide personalized feedback and hints on code refactoring exercises within a method.
 
+We published a paper describing the design and evaluation of RPT+ at the 2026 Koli Calling International Conference on Computing Education Research: `https://doi.org/10.1145/3856208.3856231`
+
 ## Features
 
 - **Interactive Code Exercises**: Practice refactoring in Python, Java, and C#
@@ -187,14 +189,6 @@ Exercises include:
 - Expected refactored solution
 - Test cases for validation
 
-### Code Submission Pipeline
-
-1. User submits code through the web interface
-2. Backend validates syntax and executes code via Judge0
-3. LLM analyzes code quality and provides feedback
-4. System stores submission, feedback, and action logs
-5. User receives personalized guidance
-
 ## Database Schema
 
 The system uses the following main tables:
@@ -238,22 +232,10 @@ alembic upgrade head
 - Clear `node_modules` and reinstall: `rm -rf node_modules && npm install`
 - Clear Vite cache: `rm -rf vite-frontend/dist && npm run build`
 
-## Logging and Monitoring
-
-The system logs all user actions for research purposes:
-- Action logs are stored in the database
-- Can be exported via the `/rpt-plus/actions` endpoint
-- HTML visualization available in `experiment_data/action_log.html`
-
 ## License
 
 This project is licensed under the **MIT License**. See the [LICENSE](./LICENSE) file for details.
 
 ## Contact
 
-For questions or issues, please open an issue on GitHub or contact the project maintainer.
-
----
-
-**Repository**: [eduardo-coliveira/RPT-Plus](https://github.com/eduardo-coliveira/RPT-Plus)
-
+For questions or issues, please open an issue on GitHub.
